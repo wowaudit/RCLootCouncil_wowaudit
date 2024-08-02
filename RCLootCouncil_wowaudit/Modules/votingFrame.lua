@@ -14,18 +14,17 @@ function wowauditVotingFrame:OnInitialize()
 	end
 
   tinsert(RCVotingFrame.scrollCols, 8, {
-    name = "Wishlist (wowaudit)",
+    name = "Wishlist (" .. logoIcon .. " wowaudit)",
     DoCellUpdate = wowauditVotingFrame.SetCellWishlist,
     colName = "wishlist",
-    sortnext = 5,
-    width = 120,
+    comparesort = wowauditVotingFrame.WishlistSort,
+    width = 140,
   })
 
 	tinsert(RCVotingFrame.scrollCols, 9, {
 		name = "",
 		DoCellUpdate = wowauditVotingFrame.SetCellWishlistNote,
 		colName = "wishlistNote",
-		sortNext = 10,
 		width = 30,
 	})
 
@@ -35,7 +34,14 @@ end
 function wowauditVotingFrame:SetCellWishlist(frame, data, cols, row, realrow, column, fShow, table, ...)
   local lootTable = addon:GetLootTable()
 
-  if lootTable then
+	if not wowauditDataPresent() then
+		local text = withColor("no data found", "o")
+		frame.text:SetText(text)
+		data[realrow].cols[column].value = text
+		return
+	end
+
+	if lootTable then
 		local wishes = wowauditData(data[realrow].name, lootTable[session].itemID, lootTable[session].string)
 
 		local text = ""
@@ -57,7 +63,7 @@ end
 function wowauditVotingFrame:SetCellWishlistNote(frame, data, cols, row, realrow, column, fShow, table, ...)
 	local lootTable = addon:GetLootTable()
 
-  if lootTable then
+	if lootTable and wowauditDataPresent() then
 		local wishes = wowauditData(data[realrow].name, lootTable[session].itemID, lootTable[session].string)
 
 		local text = ""
@@ -67,17 +73,20 @@ function wowauditVotingFrame:SetCellWishlistNote(frame, data, cols, row, realrow
 			end
 		end
 
+		local f = frame.noteBtn or CreateFrame("Button", nil, frame)
 		if string.len(text) > 0 then
-			local name = data[realrow].name
-			local f = frame.noteBtn or CreateFrame("Button", nil, frame)
 			f:SetSize(20, 20)
 			f:SetPoint("CENTER", frame, "CENTER")
 			f:SetNormalTexture("Interface/BUTTONS/UI-GuildButton-PublicNote-Up.png")
 			f:SetScript("OnEnter", function() addon:CreateTooltip("Wishlist comment", text)	end)
 			f:SetScript("OnLeave", function() addon:HideTooltip() end)
 			data[realrow].cols[column].value = 1
-			frame.noteBtn = f
+		else
+			f:SetNormalTexture("Interface/BUTTONS/UI-GuildButton-PublicNote-Disabled.png")
+			f:SetScript("OnEnter", nil)
+			data[realrow].cols[column].value = 0
 		end
+		frame.noteBtn = f
 	end
 end
 
@@ -86,4 +95,24 @@ function wowauditVotingFrame:OnMessageReceived(msg, ...)
     local s = unpack({...})
     session = s
   end
+end
+
+function wowauditVotingFrame:WishlistSort(rowa, rowb, sortbycol)
+	local column = self.cols[sortbycol]
+	local namea, nameb = self:GetRow(rowa).name, self:GetRow(rowb).name;
+	local lootTable = addon:GetLootTable()
+
+	local a = highestWishValue(wowauditData(namea, lootTable[session].itemID, lootTable[session].string))
+	local b = highestWishValue(wowauditData(nameb, lootTable[session].itemID, lootTable[session].string))
+
+	if a == b then
+		return false
+	else
+		local direction = column.sort or column.defaultsort or 1
+		if direction == 1 then
+			return a < b;
+		else
+			return a > b;
+		end
+	end
 end

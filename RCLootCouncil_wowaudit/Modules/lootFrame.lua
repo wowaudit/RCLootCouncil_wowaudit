@@ -27,10 +27,28 @@ function wowauditLootFrame:HookGetEntry(_, item)
 end
 
 function wowauditLootFrame.HookEntryUpdate(_, entry)
-	local lootTable = addon:GetLootTable()
-	local text = entry.itemLvl:GetText()
-	local session = entry.item.sessions and entry.item.sessions[1]
-	if session then
-		entry.itemLvl:SetText(text.."  |cffffff00GP: ".."|TInterface\\AddOns\\RCLootCouncil_wowaudit\\Media\\logo:16:16:0:0:0:0:0:0:0:0|tTEST very long text what is gonna happen!".."|r")
-	end
+  local text = entry.itemLvl:GetText()
+
+  if not wowauditDataPresent() then
+    entry.itemLvl:SetText(text.." - "..logoIcon..withColor(' wowaudit data missing', 'o'))
+  else
+    local lootTable = addon:GetLootTable()
+
+    local session = entry.item.sessions and entry.item.sessions[1]
+    if session then
+      local wishes = wowauditData(addon.playerName, lootTable[session].itemID, lootTable[session].string)
+
+      local wishText = ""
+      for i, wish in ipairs(wishes) do
+        wishText = wishText .. specIcon(wish.spec) .. withColor(wish.value, wish.status) .. " "
+      end
+
+      if string.len(wishText) > 0 then
+        entry.itemLvl:SetText(text.." - "..logoIcon.." "..wishText)
+        return
+      end
+
+      entry.itemLvl:SetText(text.." - "..logoIcon..withColor(' not on wishlist', 'n'))
+    end
+  end
 end

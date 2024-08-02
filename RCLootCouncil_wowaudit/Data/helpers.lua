@@ -1,3 +1,11 @@
+wowauditDataPresent = function()
+  if wowauditTimestamp == nil then
+    return false
+  else
+    return true
+  end
+end
+
 wowauditData = function(character, itemID, itemString)
   local wishes = {}
   for property in string.gmatch(itemString, "([^:]+)") do
@@ -15,6 +23,17 @@ wowauditData = function(character, itemID, itemString)
   end
 
   return wishes
+end
+
+highestWishValue = function(wishes)
+  local highest = 0
+  for i, wish in ipairs(wishes) do
+    if wish.value > highest then
+      highest = wish.value
+    end
+  end
+
+  return highest
 end
 
 -- status values are one-character acronyms on purpose, to save space.
@@ -82,6 +101,8 @@ specCoords = {
   [1468] = {320/512, 384/512, 256/512, 320/512}, -- Preservation
   [1473] = {384/512, 448/512, 256/512, 320/512}, -- Augmentation
 }
+
+logoIcon = "|TInterface\\AddOns\\RCLootCouncil_wowaudit\\Media\\logo:16:16:0:0:0:0:0:0:0:0|t"
 
 specIcon = function(specID)
   local iconSize = 12
