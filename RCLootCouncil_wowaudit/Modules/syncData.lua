@@ -23,7 +23,7 @@ function wowauditSyncData:OnMessageReceived(msg, ...)
 	if msg == "RCMLAddItem" then
 		local item, entry = unpack({...})
 
-    if wowauditDataPresent() then
+    if wowauditTimestamp ~= nil then
       local itemID = ItemUtils:GetItemIDFromLink(item)
       addon:Send("group", "wishlist_data", itemID, wowauditTimestamp, wowauditDataForItem(itemID, entry.string))
     end
