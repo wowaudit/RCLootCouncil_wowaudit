@@ -11,10 +11,10 @@
 core.lua
 
 Data\db.lua
-Data\helpers.lua
+
+Utils\helpers.lua
+Utils\popups.lua
 
 Modules\syncData.lua
 Modules\votingFrame.lua
 Modules\lootFrame.lua
-
-Utils\popups.lua
