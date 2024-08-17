@@ -36,7 +36,7 @@ function wowauditLootFrame.HookEntryUpdate(_, entry)
 
     local session = entry.item.sessions and entry.item.sessions[1]
     if session then
-      local wishes = wowauditData(addon.playerName, lootTable[session].itemID, lootTable[session].string)
+      local wishes = wowauditDataToDisplay(lootTable[session].itemID, lootTable[session].string, addon.playerName)
 
       local wishText = ""
       for i, wish in ipairs(wishes) do

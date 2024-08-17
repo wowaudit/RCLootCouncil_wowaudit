@@ -1,5 +1,4 @@
 local addon = LibStub("AceAddon-3.0"):GetAddon("RCLootCouncil")
-local RCLootCouncilML = addon:GetModule("RCLootCouncilML")
 local RCVotingFrame = addon:GetModule("RCVotingFrame")
 
 local RCwowaudit = addon:GetModule("RCwowaudit")
@@ -42,7 +41,7 @@ function wowauditVotingFrame:SetCellWishlist(frame, data, cols, row, realrow, co
 	end
 
 	if lootTable then
-		local wishes = wowauditData(data[realrow].name, lootTable[session].itemID, lootTable[session].string)
+		local wishes = wowauditDataToDisplay(lootTable[session].itemID, lootTable[session].string, data[realrow].name)
 
 		local text = ""
 		for i, wish in ipairs(wishes) do
@@ -64,7 +63,7 @@ function wowauditVotingFrame:SetCellWishlistNote(frame, data, cols, row, realrow
 	local lootTable = addon:GetLootTable()
 
 	if lootTable and wowauditDataPresent() then
-		local wishes = wowauditData(data[realrow].name, lootTable[session].itemID, lootTable[session].string)
+		local wishes = wowauditDataToDisplay(lootTable[session].itemID, lootTable[session].string, data[realrow].name)
 
 		local text = ""
 		for i, wish in ipairs(wishes) do
@@ -102,8 +101,8 @@ function wowauditVotingFrame:WishlistSort(rowa, rowb, sortbycol)
 	local namea, nameb = self:GetRow(rowa).name, self:GetRow(rowb).name;
 	local lootTable = addon:GetLootTable()
 
-	local a = highestWishValue(wowauditData(namea, lootTable[session].itemID, lootTable[session].string))
-	local b = highestWishValue(wowauditData(nameb, lootTable[session].itemID, lootTable[session].string))
+	local a = highestWishValue(wowauditDataToDisplay(lootTable[session].itemID, lootTable[session].string, namea))
+	local b = highestWishValue(wowauditDataToDisplay(lootTable[session].itemID, lootTable[session].string, nameb))
 
 	if a == b then
 		return false

@@ -1,12 +1,25 @@
+syncedDataTimestamp = nil
+syncedWowauditData = {}
+
 wowauditDataPresent = function()
-  if wowauditTimestamp == nil then
+  if wowauditTimestamp == nil and syncedDataTimestamp == nil then
     return false
   else
     return true
   end
 end
 
-wowauditData = function(character, itemID, itemString)
+wowauditDataToDisplay = function(itemID, itemString, character)
+  if syncedDataTimestamp ~= nil and (wowauditTimestamp == nil or syncedDataTimestamp > wowauditTimestamp) then
+    if syncedWowauditData[itemID] and syncedWowauditData[itemID][character] then
+      return syncedWowauditData[itemID][character]
+    end
+  else
+    return wowauditDataForCharacter(itemID, itemString, character)
+  end
+end
+
+wowauditDataForCharacter = function(itemID, itemString, character)
   local wishes = {}
   for property in string.gmatch(itemString, "([^:]+)") do
     if difficulties[property] then
@@ -23,6 +36,18 @@ wowauditData = function(character, itemID, itemString)
   end
 
   return wishes
+end
+
+wowauditDataForItem = function(itemID, itemString)
+  local characters = {}
+  for character, _ in pairs(wishlistData) do
+    local wishes = wowauditDataForCharacter(itemID, itemString, character)
+    if #wishes > 0 then
+      characters[character] = wishes
+    end
+  end
+
+  return characters
 end
 
 highestWishValue = function(wishes)
