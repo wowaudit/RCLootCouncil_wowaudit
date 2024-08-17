@@ -25,7 +25,7 @@ function wowauditSyncData:OnMessageReceived(msg, ...)
 
     if wowauditDataPresent() then
       local itemID = ItemUtils:GetItemIDFromLink(item)
-      -- addon:Send("group", "wishlist_data", itemID, wowauditTimestamp, wowauditDataForItem(itemID, entry.string))
+      addon:Send("group", "wishlist_data", itemID, wowauditTimestamp, wowauditDataForItem(itemID, entry.string))
     end
 	end
 end
