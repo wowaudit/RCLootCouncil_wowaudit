@@ -1,8 +1,8 @@
-syncedDataTimestamp = nil
-syncedWowauditData = {}
+sharedDataTimestamp = nil
+sharedWowauditData = {}
 
 wowauditDataPresent = function()
-  if wowauditTimestamp == nil and syncedDataTimestamp == nil then
+  if wowauditTimestamp == nil and sharedDataTimestamp == nil then
     return false
   else
     return true
@@ -10,9 +10,9 @@ wowauditDataPresent = function()
 end
 
 wowauditDataToDisplay = function(itemID, itemString, character)
-  if syncedDataTimestamp ~= nil and (wowauditTimestamp == nil or syncedDataTimestamp > wowauditTimestamp) then
-    if syncedWowauditData[itemID] and syncedWowauditData[itemID][character] then
-      return syncedWowauditData[itemID][character]
+  if sharedDataTimestamp ~= nil and (wowauditTimestamp == nil or sharedDataTimestamp > wowauditTimestamp) then
+    if sharedWowauditData[itemID] and sharedWowauditData[itemID][character] then
+      return sharedWowauditData[itemID][character]
     end
   else
     return wowauditDataForCharacter(itemID, itemString, character)

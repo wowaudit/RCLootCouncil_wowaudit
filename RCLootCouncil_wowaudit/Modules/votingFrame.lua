@@ -40,7 +40,7 @@ function wowauditVotingFrame:SetCellWishlist(frame, data, cols, row, realrow, co
 		return
 	end
 
-	if lootTable then
+	if lootTable and lootTable[session] then
 		local wishes = wowauditDataToDisplay(lootTable[session].itemID, lootTable[session].string, data[realrow].name)
 
 		local text = ""
@@ -62,7 +62,7 @@ end
 function wowauditVotingFrame:SetCellWishlistNote(frame, data, cols, row, realrow, column, fShow, table, ...)
 	local lootTable = addon:GetLootTable()
 
-	if lootTable and wowauditDataPresent() then
+	if lootTable and lootTable[session] and wowauditDataPresent() then
 		local wishes = wowauditDataToDisplay(lootTable[session].itemID, lootTable[session].string, data[realrow].name)
 
 		local text = ""

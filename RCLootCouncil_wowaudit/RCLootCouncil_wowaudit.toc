@@ -15,6 +15,7 @@ Data\db.lua
 Utils\helpers.lua
 Utils\popups.lua
 
-Modules\syncData.lua
+Modules\shareData.lua
 Modules\votingFrame.lua
 Modules\lootFrame.lua
+Modules\lootHistory.lua

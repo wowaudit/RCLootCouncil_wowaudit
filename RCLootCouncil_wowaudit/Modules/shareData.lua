@@ -3,9 +3,9 @@ local Comms = addon.Require "Services.Comms"
 local ItemUtils = addon.Require "Utils.Item"
 
 local RCwowaudit = addon:GetModule("RCwowaudit")
-local wowauditSyncData = RCwowaudit:NewModule("wowauditSyncData", "AceComm-3.0", "AceConsole-3.0", "AceHook-3.0", "AceEvent-3.0", "AceTimer-3.0", "AceSerializer-3.0")
+local wowauditShareData = RCwowaudit:NewModule("wowauditShareData", "AceComm-3.0", "AceConsole-3.0", "AceHook-3.0", "AceEvent-3.0", "AceTimer-3.0", "AceSerializer-3.0")
 
-function wowauditSyncData:OnInitialize()
+function wowauditShareData:OnInitialize()
 	self:RegisterMessage("RCMLAddItem", "OnMessageReceived")
 
   Comms:Subscribe(
@@ -19,18 +19,18 @@ function wowauditSyncData:OnInitialize()
 	)
 end
 
-function wowauditSyncData:OnMessageReceived(msg, ...)
+function wowauditShareData:OnMessageReceived(msg, ...)
 	if msg == "RCMLAddItem" then
 		local item, entry = unpack({...})
 
-    if wowauditTimestamp ~= nil then
-      local itemID = ItemUtils:GetItemIDFromLink(item)
+		local itemID = ItemUtils:GetItemIDFromLink(item)
+    if wowauditTimestamp ~= nil and itemID then
       addon:Send("group", "wishlist_data", itemID, wowauditTimestamp, wowauditDataForItem(itemID, entry.string))
     end
 	end
 end
 
-function wowauditSyncData:OnWishlistDataReceived(itemID, timestamp, wishes)
-  syncedDataTimestamp = timestamp
-  syncedWowauditData[itemID] = wishes
+function wowauditShareData:OnWishlistDataReceived(itemID, timestamp, wishes)
+  sharedDataTimestamp = timestamp
+  sharedWowauditData[itemID] = wishes
 end
