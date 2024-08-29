@@ -52,9 +52,11 @@ end
 
 highestWishValue = function(wishes)
     local highest = 0
-    for i, wish in ipairs(wishes) do
-        if wish.value > highest then
-            highest = wish.value
+    if wishes then
+        for i, wish in ipairs(wishes) do
+            if wish.value > highest then
+                highest = wish.value
+            end
         end
     end
 
