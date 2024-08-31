@@ -1,5 +1,11 @@
 sharedDataTimestamp = nil
 sharedWowauditData = {}
+itemContextDifficulties = {
+    ["3"] = "N",
+    ["4"] = "R",
+    ["5"] = "H",
+    ["6"] = "M"
+}
 
 wowauditDataPresent = function()
     if wowauditTimestamp == nil and sharedDataTimestamp == nil then
@@ -21,15 +27,23 @@ end
 
 wowauditDataForCharacter = function(itemID, itemString, character)
     local wishes = {}
+    local difficulty = nil
     for property in string.gmatch(itemString, "([^:]+)") do
         if difficulties[property] then
-            local diff = difficulties[property]
+            difficulty = difficulties[property]
+        end
+    end
 
-            if wishlistData[character] and wishlistData[character][diff] then
-                for _, item in ipairs(wishlistData[character][diff]) do
-                    if item.id == itemID then
-                        tinsert(wishes, item)
-                    end
+    -- Items from the dungeon journal don't have bonus IDs, but they do have itemContext.
+    if not difficulty then
+        difficulty = itemContextDifficulties[getValueFromItemLink(itemString, 12)]
+    end
+
+    if difficulty then
+        if wishlistData[character] and wishlistData[character][difficulty] then
+            for _, item in ipairs(wishlistData[character][difficulty]) do
+                if item.id == itemID then
+                    tinsert(wishes, item)
                 end
             end
         end
@@ -136,4 +150,13 @@ specIcon = function(specID)
     local L, R, T, B = unpack(specCoords[specID])
     return "|TInterface\\AddOns\\RCLootCouncil_wowaudit\\Media\\spec_icons_normal:" .. iconSize .. ":" .. iconSize ..
                ":0:0:512:512:" .. (L * 512) .. ":" .. (R * 512) .. ":" .. (T * 512) .. ":" .. (B * 512) .. "|t "
+end
+
+-- https://wowpedia.fandom.com/wiki/ItemLink
+getValueFromItemLink = function(itemLink, index)
+    local result = {}
+    for match in (itemLink .. ":"):gmatch("(.-)" .. ":") do
+        table.insert(result, match)
+    end
+    return result[index]
 end
