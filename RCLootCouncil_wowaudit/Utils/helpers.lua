@@ -1,3 +1,4 @@
+wowauditValueDisplay = 'value'
 sharedDataTimestamp = nil
 sharedWowauditData = {}
 itemContextDifficulties = {
@@ -68,8 +69,10 @@ highestWishValue = function(wishes)
     local highest = 0
     if wishes then
         for i, wish in ipairs(wishes) do
-            if wish.value > highest then
-                highest = wish.value
+            local value = wowauditValueDisplay == "value" and wish.value or wish.percent
+
+            if value > highest then
+                highest = value
             end
         end
     end
@@ -85,7 +88,7 @@ textColors = {
 }
 
 withColor = function(text, colorKey)
-    return "|cn" .. textColors[colorKey] .. ":" .. text .. "|r"
+    return "|cn" .. textColors[colorKey] .. ":" .. (text or "error") .. "|r"
 end
 
 -- Copied from Details/functions/profiles.lua
@@ -143,6 +146,7 @@ specCoords = {
     [1473] = {384 / 512, 448 / 512, 256 / 512, 320 / 512} -- Augmentation
 }
 
+logoIconSmall = "|TInterface\\AddOns\\RCLootCouncil_wowaudit\\Media\\logo:12:12:0:0:0:0:0:0:0:0|t"
 logoIcon = "|TInterface\\AddOns\\RCLootCouncil_wowaudit\\Media\\logo:16:16:0:0:0:0:0:0:0:0|t"
 
 specIcon = function(specID)

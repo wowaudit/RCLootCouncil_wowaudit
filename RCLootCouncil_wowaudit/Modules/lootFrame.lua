@@ -41,7 +41,8 @@ function wowauditLootFrame.HookEntryUpdate(_, entry)
             local wishText = ""
             if wishes then
                 for i, wish in ipairs(wishes) do
-                    wishText = wishText .. specIcon(wish.spec) .. withColor(wish.value, wish.status) .. " "
+                    local valueToShow = wowauditValueDisplay == "value" and wish.value or (wish.percent .. "%")
+                    wishText = wishText .. specIcon(wish.spec) .. withColor(valueToShow, wish.status) .. " "
                 end
             end
 
