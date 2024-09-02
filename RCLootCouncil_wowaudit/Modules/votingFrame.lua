@@ -52,8 +52,8 @@ function wowauditVotingFrame:SetCellWishlist(frame, data, cols, row, realrow, co
         local text = ""
         if wishes then
             for i, wish in ipairs(wishes) do
-                local valueToShow = wowauditValueDisplay == "value" and wish.value or (wish.percent .. "%")
-                text = text .. specIcon(wish.spec) .. withColor(valueToShow, wish.status) .. (i == 2 and "\n" or "    ")
+                text = text .. specIcon(wish.spec) .. withColor(displayWish(wish), wish.status) ..
+                           (i == 2 and "\n" or "    ")
             end
         end
 

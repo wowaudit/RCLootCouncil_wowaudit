@@ -69,15 +69,27 @@ highestWishValue = function(wishes)
     local highest = 0
     if wishes then
         for i, wish in ipairs(wishes) do
-            local value = wowauditValueDisplay == "value" and wish.value or wish.percent
+            local value = tonumber(wowauditValueDisplay == "value" and wish.value or wish.percent)
 
-            if value > highest then
+            if value and value > highest then
                 highest = value
             end
         end
     end
 
     return highest
+end
+
+displayWish = function(wish)
+    if wowauditValueDisplay == "value" then
+        return wish.value
+    else
+        if tonumber(wish.percent) then
+            return wish.percent .. "%"
+        else
+            return wish.percent
+        end
+    end
 end
 
 -- status values are one-character acronyms on purpose, to save space.
