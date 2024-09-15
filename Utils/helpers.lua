@@ -1,4 +1,3 @@
-wowauditValueDisplay = 'value'
 sharedDataTimestamp = nil
 sharedWowauditData = {}
 itemContextDifficulties = {
@@ -27,6 +26,7 @@ wowauditDataToDisplay = function(itemID, itemString, character)
 end
 
 wowauditDataForCharacter = function(itemID, itemString, character)
+    -- TODO: use difficulty match setting
     local wishes = {}
     local difficulty = nil
     for property in string.gmatch(itemString, "([^:]+)") do
@@ -69,7 +69,7 @@ highestWishValue = function(wishes)
     local highest = 0
     if wishes then
         for i, wish in ipairs(wishes) do
-            local value = tonumber(wowauditValueDisplay == "value" and wish.value or wish.percent)
+            local value = tonumber(wowauditValueDisplay == "VALUE" and wish.value or wish.percent)
 
             if value and value > highest then
                 highest = value
@@ -81,15 +81,19 @@ highestWishValue = function(wishes)
 end
 
 displayWish = function(wish)
-    if wowauditValueDisplay == "value" then
-        return wish.value
+    local displayValue
+
+    if wowauditValueDisplay == "VALUE" then
+        displayValue = wish.value
     else
         if tonumber(wish.percent) then
-            return wish.percent .. "%"
+            displayValue = wish.percent .. "%"
         else
-            return wish.percent
+            displayValue = wish.percent
         end
     end
+
+    return specIcon(wish.spec) .. withColor(displayValue, wish.status)
 end
 
 -- status values are one-character acronyms on purpose, to save space.

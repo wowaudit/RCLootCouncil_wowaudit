@@ -13,9 +13,6 @@ function wowauditVotingFrame:OnInitialize()
         return self:ScheduleTimer("OnInitialize", 0.5)
     end
 
-    db = addon:Getdb()
-    wowauditValueDisplay = db.wowauditValueDisplay or "value"
-
     self:SecureHook(RCVotingFrame, "OnEnable", "AddButtonToFrame")
 
     tinsert(RCVotingFrame.scrollCols, 8, {
@@ -52,8 +49,7 @@ function wowauditVotingFrame:SetCellWishlist(frame, data, cols, row, realrow, co
         local text = ""
         if wishes then
             for i, wish in ipairs(wishes) do
-                text = text .. specIcon(wish.spec) .. withColor(displayWish(wish), wish.status) ..
-                           (i == 2 and "\n" or "    ")
+                text = text .. displayWish(wish) .. (i == 2 and "\n" or "    ")
             end
         end
 
@@ -135,21 +131,19 @@ function wowauditVotingFrame:AddButtonToFrame()
     local f = RCVotingFrame:GetFrame()
     db = addon:Getdb()
 
-    local text = wowauditValueDisplay == "value" and " Show %" or " Show value"
+    local text = wowauditValueDisplay == "VALUE" and " Show %" or " Show value"
     local valueDisplayButton = addon:CreateButton(logoIconSmall .. text, f.content)
     valueDisplayButton:SetSize(125, 25)
     valueDisplayButton:SetPoint("RIGHT", f.disenchant, "LEFT", -10, 0)
     valueDisplayButton:SetScript("OnClick", function(self)
-        if wowauditValueDisplay == "value" then
-            wowauditValueDisplay = "percent"
+        if wowauditValueDisplay == "VALUE" then
+            wowauditValueDisplay = "PERCENTAGE"
             valueDisplayButton:SetText(logoIconSmall .. " Show value")
         else
-            wowauditValueDisplay = "value"
+            wowauditValueDisplay = "VALUE"
             valueDisplayButton:SetText(logoIconSmall .. " Show %")
         end
 
-        -- persist the value across reloads
-        db.wowauditValueDisplay = wowauditValueDisplay
         RCVotingFrame:Update()
     end)
 
