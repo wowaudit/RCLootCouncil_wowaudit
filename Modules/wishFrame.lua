@@ -128,9 +128,13 @@ function wowauditWishFrame:Show()
         end
     end
 
-    self.frame.infoText:SetText(
-        wishesFound .. "wishes found, from " .. charactersFound .. " characters. Last updated " ..
-            date("%B %d, %H:%M", wowauditTimestamp), "b")
+    if wowauditTimestamp == nil then
+        self.frame.infoText:SetText(withColor(
+            "No wishlist data found. Ensure that the desktop client is installed and running.", "o"))
+    else
+        self.frame.infoText:SetText(wishesFound .. " wishes found, from " .. charactersFound ..
+                                        " characters. Last updated " .. date("%B %d, %H:%M", wowauditTimestamp), "b")
+    end
 
     self.frame.st:SetData(rows, true)
     self.frame:Show()
