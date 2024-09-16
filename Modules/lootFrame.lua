@@ -43,6 +43,10 @@ function wowauditLootFrame.HookEntryUpdate(_, entry)
                 for i, wish in ipairs(wishes) do
                     wishText = wishText .. displayWish(wish) .. " "
                 end
+
+                if wishes[1] and wishes[1].difficulty then
+                    wishText = wishText .. " (" .. wishes[1].difficulty .. ")"
+                end
             end
 
             if string.len(wishText) > 0 then

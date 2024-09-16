@@ -1,11 +1,22 @@
 sharedDataTimestamp = nil
 sharedWowauditData = {}
-itemContextDifficulties = {
+
+local itemContextDifficulties = {
     ["3"] = "N",
     ["4"] = "R",
     ["5"] = "H",
     ["6"] = "M"
 }
+local difficultyOrder = {"R", "N", "H", "M"}
+
+local presentDifficulties = {}
+for character, difficulties in pairs(wishlistData) do
+    for difficulty, items in pairs(difficulties) do
+        if presentDifficulties[difficulty] == nil and items and next(items) ~= nil then
+            presentDifficulties[difficulty] = true
+        end
+    end
+end
 
 wowauditDataPresent = function()
     if wowauditTimestamp == nil and sharedDataTimestamp == nil then
@@ -26,8 +37,6 @@ wowauditDataToDisplay = function(itemID, itemString, character)
 end
 
 wowauditDataForCharacter = function(itemID, itemString, character)
-    -- TODO: use difficulty match setting
-    local wishes = {}
     local difficulty = nil
     for property in string.gmatch(itemString, "([^:]+)") do
         if difficulties[property] then
@@ -41,9 +50,34 @@ wowauditDataForCharacter = function(itemID, itemString, character)
     end
 
     if difficulty then
-        if wishlistData[character] and wishlistData[character][difficulty] then
+        return wowauditCharacterDataForDifficulty(itemID, character, difficulty, true, difficulty)
+    else
+        return {}
+    end
+end
+
+wowauditCharacterDataForDifficulty = function(itemId, character, difficulty, initial, originalDifficulty)
+    local wishes = {}
+    if wishlistData[character] then
+        if wishlistData[character][difficulty] == nil or next(wishlistData[character][difficulty]) == nil then
+            if wowauditDifficultyMatch == "STRICT" then
+                return {}
+            else
+                local nextDifficulty = getNextDifficulty(difficulty)
+                if initial and nextDifficulty then
+                    return wowauditCharacterDataForDifficulty(itemId, character, nextDifficulty,
+                        wowauditDifficultyMatch == "ANY", difficulty)
+                else
+                    return {}
+                end
+            end
+        else
             for _, item in ipairs(wishlistData[character][difficulty]) do
-                if item.id == itemID then
+                if item.id == itemId then
+                    if originalDifficulty ~= difficulty then
+                        item.difficulty = difficulty
+                    end
+
                     tinsert(wishes, item)
                 end
             end
@@ -94,6 +128,23 @@ displayWish = function(wish)
     end
 
     return specIcon(wish.spec) .. withColor(displayValue, wish.status)
+end
+
+getNextDifficulty = function(currentDifficulty)
+    for i, diff in ipairs(difficultyOrder) do
+        if diff == currentDifficulty then
+            local nextDifficulty = difficultyOrder[i + 1]
+            if presentDifficulties[nextDifficulty] then
+                return nextDifficulty
+            else
+                if nextDifficulty then
+                    return getNextDifficulty(nextDifficulty)
+                else
+                    return nil
+                end
+            end
+        end
+    end
 end
 
 -- status values are one-character acronyms on purpose, to save space.

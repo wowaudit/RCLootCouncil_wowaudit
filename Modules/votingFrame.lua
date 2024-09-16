@@ -20,7 +20,7 @@ function wowauditVotingFrame:OnInitialize()
         DoCellUpdate = wowauditVotingFrame.SetCellWishlist,
         colName = "wishlist",
         comparesort = wowauditVotingFrame.WishlistSort,
-        width = 140
+        width = 150
     })
 
     tinsert(RCVotingFrame.scrollCols, 9, {
@@ -31,6 +31,10 @@ function wowauditVotingFrame:OnInitialize()
     })
 
     self:RegisterMessage("RCSessionChangedPre", "OnMessageReceived")
+end
+
+function wowauditVotingFrame:OnEnable()
+    self:UpdateSortNext()
 end
 
 function wowauditVotingFrame:SetCellWishlist(frame, data, cols, row, realrow, column, fShow, table, ...)
@@ -49,7 +53,11 @@ function wowauditVotingFrame:SetCellWishlist(frame, data, cols, row, realrow, co
         local text = ""
         if wishes then
             for i, wish in ipairs(wishes) do
-                text = text .. displayWish(wish) .. (i == 2 and "\n" or "    ")
+                text = (i == 3 and "\n" or "") .. text .. displayWish(wish) .. (i == 2 and "" or "    ")
+            end
+
+            if wishes[1] and wishes[1].difficulty then
+                text = text .. " (" .. wishes[1].difficulty .. ")"
             end
         end
 
@@ -148,4 +156,22 @@ function wowauditVotingFrame:AddButtonToFrame()
     end)
 
     f.valueDisplayButton = valueDisplayButton
+end
+
+function wowauditVotingFrame:UpdateSortNext()
+    for index in ipairs(RCVotingFrame.scrollCols) do
+        if RCVotingFrame.scrollCols[index].sortNext then
+            local exists = self:GetScrollColIndexFromName(self.sortNext[RCVotingFrame.scrollCols[index].colName])
+            RCVotingFrame.scrollCols[index].sortNext = exists
+        end
+    end
+
+    if RCVotingFrame.frame then
+        RCVotingFrame.frame.st:SetDisplayCols(RCVotingFrame.scrollCols)
+        RCVotingFrame.frame:SetWidth(RCVotingFrame.frame.st.frame:GetWidth() + 20)
+    end
+end
+
+function wowauditVotingFrame:GetScrollColIndexFromName(name)
+    return RCVotingFrame:GetColumnIndexFromName(name)
 end
