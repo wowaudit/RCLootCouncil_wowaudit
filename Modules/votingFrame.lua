@@ -15,6 +15,14 @@ function wowauditVotingFrame:OnInitialize()
 
     self:SecureHook(RCVotingFrame, "OnEnable", "AddButtonToFrame")
 
+    -- Translate sortNext into colNames (copied from RCLootCouncil_ExtraUtilities)
+    self.sortNext = {}
+    for _, v in ipairs(RCVotingFrame.scrollCols) do
+        if v.sortNext then
+            self.sortNext[v.colName] = RCVotingFrame.scrollCols[v.sortNext].colName
+        end
+    end
+
     tinsert(RCVotingFrame.scrollCols, 8, {
         name = "Wishlist (" .. logoIcon .. " wowaudit)",
         DoCellUpdate = wowauditVotingFrame.SetCellWishlist,
