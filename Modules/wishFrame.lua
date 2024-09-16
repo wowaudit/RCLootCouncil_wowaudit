@@ -53,10 +53,12 @@ function wowauditWishFrame:SetupColumns()
     }, -- class icon
     {
         name = "Name",
-        width = 120
+        width = 150
     }, {
         name = "Item",
-        width = 180
+        width = 180,
+        comparesort = self.StringSort,
+        DoCellUpdate = self.SetItemLink
     }, {
         name = "",
         width = 20
@@ -66,13 +68,16 @@ function wowauditWishFrame:SetupColumns()
         width = 60
     }, {
         name = "Value",
-        width = 50
+        width = 50,
+        comparesort = self.NumberSort
     }, {
         name = "Percent",
-        width = 50
-    }, {
-        name = "Note",
-        width = 30
+        width = 50,
+        comparesort = self.NumberSort
+        -- }, {
+        --     name = "Note",
+        --     width = 30,
+        --     DoCellUpdate = self.SetWishNote
     }}
 end
 
@@ -80,28 +85,52 @@ function wowauditWishFrame:Show()
     self.frame = self:GetFrame()
 
     local rows = {}
+    local charactersFound = 0
+    local wishesFound = 0
     for character, difficulties in pairs(wishlistData) do
+        charactersFound = charactersFound + 1
         for difficulty, items in pairs(difficulties) do
             for _, item in ipairs(items) do
                 local row = {}
-                local _, link, _, _, _, _, _, _, _ = C_Item.GetItemInfo(item.id)
+                local name, link, _, _, _, _, _, _, _ = C_Item.GetItemInfo(item.id)
 
                 if tonumber(item.percent) then
-                    row[self.colNameToIndex.percent] = withColor(item.percent .. "%", item.status)
+                    row[self.colNameToIndex.percent] = {
+                        value = withColor(item.percent .. "%", item.status),
+                        sortValue = item.percent
+                    }
+                else
+                    row[self.colNameToIndex.percent] = {
+                        value = "",
+                        sortValue = 0
+                    }
                 end
 
                 row[self.colNameToIndex.difficulty] = DIFFICULTIES[difficulty]
-                row[self.colNameToIndex.class] = CreateAtlasMarkup(specToClassIcon[item.spec], 14, 14)
+                row[self.colNameToIndex.class] = CreateAtlasMarkup(specToClassIcon[item.spec], 16, 16)
                 row[self.colNameToIndex.name] = character
-                row[self.colNameToIndex.item] = link
-                row[self.colNameToIndex.spec] = specIcon(item.spec, 14)
+                row[self.colNameToIndex.item] = {
+                    value = link,
+                    sortValue = name
+                }
+                row[self.colNameToIndex.spec] = specIcon(item.spec, 16)
                 row[self.colNameToIndex.status] = withColor(STATUSES[item.status], item.status)
-                row[self.colNameToIndex.value] = withColor(item.value, item.status)
-                row[self.colNameToIndex.note] = item.comment
+                row[self.colNameToIndex.value] = {
+                    value = withColor(item.value, item.status),
+                    sortValue = item.value
+                }
+                -- row[self.colNameToIndex.note] = {
+                --     value = item.comment or ""
+                -- }
                 tinsert(rows, row)
+                wishesFound = wishesFound + 1
             end
         end
     end
+
+    self.frame.infoText:SetText(
+        wishesFound .. "wishes found, from " .. charactersFound .. " characters. Last updated " ..
+            date("%B %d, %H:%M", wowauditTimestamp), "b")
 
     self.frame.st:SetData(rows, true)
     self.frame:Show()
@@ -119,9 +148,10 @@ function wowauditWishFrame:GetFrame()
     end
     local f = addon.UI:NewNamed("RCFrame", UIParent, "RCwowauditWishFrame", "RCLootCouncil - wowaudit - Wishes", 250)
 
-    local st = ST:CreateST(self.scrollCols, 12, ROW_HEIGHT, nil, f.content)
+    local st = ST:CreateST(self.scrollCols, 25, ROW_HEIGHT, nil, f.content)
     st.frame:SetPoint("TOPLEFT", f, "TOPLEFT", 10, -35)
     f:SetWidth(st.frame:GetWidth() + 20)
+    f:SetHeight(585)
     f.st = st
 
     local closeButton = addon:CreateButton("Close", f.content)
@@ -131,5 +161,68 @@ function wowauditWishFrame:GetFrame()
     end)
     f.closeButton = closeButton
 
+    local infoText = f.content:CreateFontString(nil, "OVERLAY", "GameFontNormal")
+    infoText:SetPoint("BOTTOMLEFT", f, "BOTTOMLEFT", 15, 15)
+    infoText:SetTextColor(1, 1, 1, 1)
+    f.infoText = infoText
+
     return f
+end
+
+function wowauditWishFrame:SetItemLink(frame, data, cols, row, realrow, column, fShow, table, ...)
+    local itemLink = data[realrow][column].value
+
+    frame:SetScript("OnEnter", function()
+        addon:CreateHypertip(itemLink)
+    end)
+    frame:SetScript("OnLeave", function()
+        addon:HideTooltip()
+    end)
+
+    frame.text:SetText(itemLink)
+    frame:Show()
+end
+
+-- This doesn't work properly when the table is scrolled, the button is sticky and doesn't respect the row
+function wowauditWishFrame:SetWishNote(frame, data, cols, row, realrow, column, fShow, table, ...)
+    local note = data[realrow][column].value
+
+    if string.len(note) > 0 then
+        local f = frame.noteBtn or CreateFrame("Button", nil, frame)
+        f:SetSize(20, 20)
+        f:SetPoint("CENTER", frame, "CENTER")
+        f:SetNormalTexture("Interface/BUTTONS/UI-GuildButton-PublicNote-Up.png")
+        f:SetScript("OnEnter", function()
+            addon:CreateTooltip("Wish comment", note)
+        end)
+        f:SetScript("OnLeave", function()
+            addon:HideTooltip()
+        end)
+        frame.noteBtn = f
+        f:Show()
+    end
+end
+
+function wowauditWishFrame:NumberSort(rowa, rowb, sortbycol)
+    local column = self.cols[sortbycol]
+    a, b = self:GetRow(rowa)[sortbycol].sortValue, self:GetRow(rowb)[sortbycol].sortValue;
+
+    local direction = column.sort or column.defaultsort or 1
+    if direction == 1 then
+        return (tonumber(a) or 0) < (tonumber(b) or 0)
+    else
+        return (tonumber(a) or 0) > (tonumber(b) or 0)
+    end
+end
+
+function wowauditWishFrame:StringSort(rowa, rowb, sortbycol)
+    local column = self.cols[sortbycol]
+    a, b = self:GetRow(rowa)[sortbycol].sortValue, self:GetRow(rowb)[sortbycol].sortValue;
+
+    local direction = column.sort or column.defaultsort or 1
+    if direction == 1 then
+        return (a or "") < (b or "")
+    else
+        return (a or "") > (b or "")
+    end
 end
