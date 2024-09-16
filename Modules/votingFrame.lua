@@ -161,7 +161,7 @@ end
 function wowauditVotingFrame:UpdateSortNext()
     for index in ipairs(RCVotingFrame.scrollCols) do
         if RCVotingFrame.scrollCols[index].sortNext then
-            local exists = self:GetScrollColIndexFromName(self.sortNext[RCVotingFrame.scrollCols[index].colName])
+            local exists = RCVotingFrame:GetColumnIndexFromName(self.sortNext[RCVotingFrame.scrollCols[index].colName])
             RCVotingFrame.scrollCols[index].sortNext = exists
         end
     end
@@ -170,8 +170,4 @@ function wowauditVotingFrame:UpdateSortNext()
         RCVotingFrame.frame.st:SetDisplayCols(RCVotingFrame.scrollCols)
         RCVotingFrame.frame:SetWidth(RCVotingFrame.frame.st.frame:GetWidth() + 20)
     end
-end
-
-function wowauditVotingFrame:GetScrollColIndexFromName(name)
-    return RCVotingFrame:GetColumnIndexFromName(name)
 end
