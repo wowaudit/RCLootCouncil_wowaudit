@@ -127,7 +127,7 @@ displayWish = function(wish)
         end
     end
 
-    return specIcon(wish.spec) .. withColor(displayValue, wish.status)
+    return specIcon(wish.spec, 12) .. withColor(displayValue, wish.status)
 end
 
 getNextDifficulty = function(currentDifficulty)
@@ -157,6 +157,60 @@ textColors = {
 withColor = function(text, colorKey)
     return "|cn" .. textColors[colorKey] .. ":" .. (text or "error") .. "|r"
 end
+
+specToClassIcon = {
+    [577] = "classicon-demonhunter",
+    [581] = "classicon-demonhunter",
+
+    [250] = "classicon-deathknight",
+    [251] = "classicon-deathknight",
+    [252] = "classicon-deathknight",
+
+    [102] = "classicon-druid",
+    [103] = "classicon-druid",
+    [104] = "classicon-druid",
+    [105] = "classicon-druid",
+
+    [253] = "classicon-hunter",
+    [254] = "classicon-hunter",
+    [255] = "classicon-hunter",
+
+    [62] = "classicon-mage",
+    [63] = "classicon-mage",
+    [64] = "classicon-mage",
+
+    [268] = "classicon-monk",
+    [269] = "classicon-monk",
+    [270] = "classicon-monk",
+
+    [65] = "classicon-paladin",
+    [66] = "classicon-paladin",
+    [70] = "classicon-paladin",
+
+    [256] = "classicon-priest",
+    [257] = "classicon-priest",
+    [258] = "classicon-priest",
+
+    [259] = "classicon-rogue",
+    [260] = "classicon-rogue",
+    [261] = "classicon-rogue",
+
+    [262] = "classicon-shaman",
+    [263] = "classicon-shaman",
+    [264] = "classicon-shaman",
+
+    [265] = "classicon-warlock",
+    [266] = "classicon-warlock",
+    [267] = "classicon-warlock",
+
+    [71] = "classicon-warrior",
+    [72] = "classicon-warrior",
+    [73] = "classicon-warrior",
+
+    [1467] = "classicon-evoker",
+    [1468] = "classicon-evoker",
+    [1473] = "classicon-evoker"
+}
 
 -- Copied from Details/functions/profiles.lua
 specCoords = {
@@ -216,8 +270,7 @@ specCoords = {
 logoIconSmall = "|TInterface\\AddOns\\RCLootCouncil_wowaudit\\Media\\logo:12:12:0:0:0:0:0:0:0:0|t"
 logoIcon = "|TInterface\\AddOns\\RCLootCouncil_wowaudit\\Media\\logo:16:16:0:0:0:0:0:0:0:0|t"
 
-specIcon = function(specID)
-    local iconSize = 12
+specIcon = function(specID, iconSize)
     local L, R, T, B = unpack(specCoords[specID])
     return "|TInterface\\AddOns\\RCLootCouncil_wowaudit\\Media\\spec_icons_normal:" .. iconSize .. ":" .. iconSize ..
                ":0:0:512:512:" .. (L * 512) .. ":" .. (R * 512) .. ":" .. (T * 512) .. ":" .. (B * 512) .. "|t "
