@@ -19,7 +19,7 @@ function wowauditShareData:OnMessageReceived(msg, ...)
         local item, entry = unpack({...})
 
         local itemID = ItemUtils:GetItemIDFromLink(item)
-        if itemID then
+        if itemID and wowauditTimestamp ~= nil then
             addon:Send("group", "wishlist_data", itemID, wowauditTimestamp, wowauditDataForItem(itemID, entry.string))
         end
     end
