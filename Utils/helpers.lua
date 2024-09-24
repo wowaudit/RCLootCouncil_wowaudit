@@ -1,4 +1,3 @@
-sharedDataTimestamp = nil
 sharedWowauditData = {}
 
 local itemContextDifficulties = {
@@ -19,7 +18,7 @@ for character, difficulties in pairs(wishlistData) do
 end
 
 wowauditDataPresent = function()
-    if wowauditTimestamp == nil and sharedDataTimestamp == nil then
+    if wowauditTimestamp == nil and sharedWowauditData == {} then
         return false
     else
         return true
@@ -27,13 +26,30 @@ wowauditDataPresent = function()
 end
 
 wowauditDataToDisplay = function(itemID, itemString, character)
-    if sharedDataTimestamp ~= nil and (wowauditTimestamp == nil or sharedDataTimestamp > wowauditTimestamp) then
-        if sharedWowauditData[itemID] and sharedWowauditData[itemID][character] then
-            return sharedWowauditData[itemID][character]
+    local wishes = {}
+    local timestamp = nil
+
+    for _, team in pairs(sharedWowauditData) do
+        if team["timestamp"] > timestamp and team["wishes"][itemID] and team["wishes"][itemID][character] then
+            wishes = team["wishes"][itemID][character]
+            timestamp = team["timestamp"]
         end
-    else
-        return wowauditDataForCharacter(itemID, itemString, character)
     end
+
+    if wowauditTimestamp ~= nil then
+        local ownWishes = wowauditDataForCharacter(itemID, itemString, character)
+        if ownWishes ~= {} then
+            if wowauditSharingSetting == 'SELF' then
+                wishes = ownWishes
+            else
+                if timestamp == nil or wowauditTimestamp > timestamp then
+                    wishes = ownWishes
+                end
+            end
+        end
+    end
+
+    return wishes
 end
 
 wowauditDataForCharacter = function(itemID, itemString, character)

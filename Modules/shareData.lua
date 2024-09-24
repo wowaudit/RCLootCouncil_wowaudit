@@ -20,14 +20,24 @@ function wowauditShareData:OnMessageReceived(msg, ...)
 
         local itemID = ItemUtils:GetItemIDFromLink(item)
         if itemID and wowauditTimestamp ~= nil then
-            addon:Send("group", "wishlist_data", itemID, wowauditTimestamp, wowauditDataForItem(itemID, entry.string))
+            addon:Send("group", "wishlist_data", itemID, wowauditTimestamp, wowauditDataForItem(itemID, entry.string),
+                teamID)
         end
     end
 end
 
-function wowauditShareData:OnWishlistDataReceived(itemID, timestamp, wishes)
-    if sharedDataTimestamp == nil or sharedWowauditData[itemID] == nil or timestamp > sharedDataTimestamp then
-        sharedDataTimestamp = timestamp
-        sharedWowauditData[itemID] = wishes
+function wowauditShareData:OnWishlistDataReceived(itemID, timestamp, wishes, team)
+    if sharedWowauditData[team] == nil then
+        sharedWowauditData[team] = {
+            timestamp = timestamp,
+            wishes = {
+                [itemID] = wishes
+            }
+        }
+    else
+        if sharedWowauditData[team]["wishes"][itemID] == nil or timestamp > sharedWowauditData[team]["timestamp"] then
+            sharedWowauditData[team]["timestamp"] = timestamp
+            sharedWowauditData[team]["wishes"][itemID] = wishes
+        end
     end
 end
