@@ -302,27 +302,27 @@ getValueFromItemLink = function(itemLink, index)
     return result[index]
 end
 
-printtable = function(data, level)
-    if not data then
-        return
-    end
-    level = level or 0
-    local ident = strrep('     ', level)
-    if level > 6 then
-        return
-    end
-    if type(data) ~= 'table' then
-        print(tostring(data))
-    end
-    for index, value in pairs(data) do
-        repeat
-            if type(value) ~= 'table' then
-                print(ident .. '[' .. tostring(index) .. '] = ' .. tostring(value) .. ' (' .. type(value) .. ')');
-                break
-            end
-            print(ident .. '[' .. tostring(index) .. '] = {')
-            _G.printtable(value, level + 1)
-            print(ident .. '}');
-        until true
-    end
-end
+-- printtable = function(data, level)
+--     if not data then
+--         return
+--     end
+--     level = level or 0
+--     local ident = strrep('     ', level)
+--     if level > 6 then
+--         return
+--     end
+--     if type(data) ~= 'table' then
+--         print(tostring(data))
+--     end
+--     for index, value in pairs(data) do
+--         repeat
+--             if type(value) ~= 'table' then
+--                 print(ident .. '[' .. tostring(index) .. '] = ' .. tostring(value) .. ' (' .. type(value) .. ')');
+--                 break
+--             end
+--             print(ident .. '[' .. tostring(index) .. '] = {')
+--             _G.printtable(value, level + 1)
+--             print(ident .. '}');
+--         until true
+--     end
+-- end
