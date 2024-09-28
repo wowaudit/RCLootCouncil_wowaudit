@@ -17,16 +17,21 @@ end
 function wowauditShareData:OnMessageReceived(msg, ...)
     if msg == "RCMLAddItem" and wowauditTimestamp ~= nil then
         local item, entry = unpack({...})
-
-        local itemID = ItemUtils:GetItemIDFromLink(item)
-        if itemID and wowauditTimestamp ~= nil then
-            addon:Send("group", "wishlist_data", itemID, wowauditTimestamp, wowauditDataForItem(itemID, entry.string),
-                teamID)
-        end
+        self:SendWishlistData(ItemUtils:GetItemIDFromLink(item), entry.string, true)
     end
 end
 
-function wowauditShareData:OnWishlistDataReceived(itemID, timestamp, wishes, team)
+function wowauditShareData:SendWishlistData(itemID, itemString, fromMasterLooter)
+    if itemID and wowauditTimestamp ~= nil then
+        print("Sending", itemID)
+        printtable(wowauditDataForItem(itemID, itemString))
+        addon:Send("group", "wishlist_data", itemID, entry.string, wowauditTimestamp,
+            wowauditDataForItem(itemID, entry.string), teamID, fromMasterLooter)
+    end
+end
+
+function wowauditShareData:OnWishlistDataReceived(itemID, itemString, timestamp, wishes, team, fromMasterLooter)
+    print("Receiving", team, itemID, fromMasterLooter)
     if sharedWowauditData[team] == nil then
         sharedWowauditData[team] = {
             timestamp = timestamp,
@@ -39,5 +44,9 @@ function wowauditShareData:OnWishlistDataReceived(itemID, timestamp, wishes, tea
             sharedWowauditData[team]["timestamp"] = timestamp
             sharedWowauditData[team]["wishes"][itemID] = wishes
         end
+    end
+
+    if fromMasterLooter and team ~= teamID then
+        self:SendWishlistData(itemID, itemString, false)
     end
 end
