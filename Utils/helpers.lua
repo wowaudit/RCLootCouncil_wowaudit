@@ -18,7 +18,7 @@ for character, difficulties in pairs(wishlistData) do
 end
 
 wowauditDataPresent = function()
-    if wowauditTimestamp == nil and sharedWowauditData == {} then
+    if wowauditTimestamp == nil and next(sharedWowauditData) == nil then
         return false
     else
         return true
@@ -39,7 +39,7 @@ wowauditDataToDisplay = function(itemID, itemString, character)
 
     if wowauditTimestamp ~= nil then
         local ownWishes = wowauditDataForCharacter(itemID, itemString, character)
-        if ownWishes ~= {} then
+        if next(ownWishes) ~= nil then
             if wowauditSharingSetting == 'SELF' then
                 wishes = ownWishes
             else
