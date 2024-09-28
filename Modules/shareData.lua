@@ -34,7 +34,7 @@ end
 function wowauditShareData:SendWishlistData(itemID, itemString, fromMasterLooter)
     if itemID and wowauditTimestamp ~= nil then
         addon:Send("group", "wishlist_data", itemID, itemString, wowauditTimestamp,
-            wowauditDataForItem(itemID, itemString), teamID, fromMasterLooter)
+            wowauditDataForItem(itemID, itemString), teamID or 0, fromMasterLooter)
     end
 end
 
@@ -53,7 +53,7 @@ function wowauditShareData:OnWishlistDataReceived(itemID, itemString, timestamp,
         end
     end
 
-    if fromMasterLooter and team ~= teamID then
+    if fromMasterLooter and team ~= (teamID or 0) then
         self:SendWishlistData(itemID, itemString, false)
     end
 end
