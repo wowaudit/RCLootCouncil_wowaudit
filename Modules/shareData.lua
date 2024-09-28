@@ -12,12 +12,22 @@ function wowauditShareData:OnInitialize()
     Comms:Subscribe(addon.PREFIXES.MAIN, "wishlist_data", function(data, sender)
         self:OnWishlistDataReceived(unpack(data))
     end)
+
+    Comms:Subscribe(addon.PREFIXES.MAIN, "request_wishlist_data", function(data, sender)
+        self:OnWishlistDataRequested(unpack(data))
+    end)
 end
 
 function wowauditShareData:OnMessageReceived(msg, ...)
-    if msg == "RCMLAddItem" and wowauditTimestamp ~= nil then
+    if msg == "RCMLAddItem" then
         local item, entry = unpack({...})
-        self:SendWishlistData(ItemUtils:GetItemIDFromLink(item), entry.string, true)
+        local itemID = ItemUtils:GetItemIDFromLink(item)
+
+        if wowauditTimestamp == nil then
+            addon:Send("group", "request_wishlist_data", itemID, entry.string)
+        else
+            self:SendWishlistData(itemID, entry.string, true)
+        end
     end
 end
 
@@ -46,4 +56,8 @@ function wowauditShareData:OnWishlistDataReceived(itemID, itemString, timestamp,
     if fromMasterLooter and team ~= teamID then
         self:SendWishlistData(itemID, itemString, false)
     end
+end
+
+function wowauditShareData:OnWishlistDataRequested(itemID, itemString)
+    self:SendWishlistData(itemID, itemString, false)
 end
