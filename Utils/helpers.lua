@@ -30,7 +30,8 @@ wowauditDataToDisplay = function(itemID, itemString, character)
     local timestamp = nil
 
     for _, team in pairs(sharedWowauditData) do
-        if team["timestamp"] > timestamp and team["wishes"][itemID] and team["wishes"][itemID][character] then
+        if (not timestamp or team["timestamp"] > timestamp) and team["wishes"][itemID] and
+            team["wishes"][itemID][character] then
             wishes = team["wishes"][itemID][character]
             timestamp = team["timestamp"]
         end
