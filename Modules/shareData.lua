@@ -25,8 +25,8 @@ function wowauditShareData:SendWishlistData(itemID, itemString, fromMasterLooter
     if itemID and wowauditTimestamp ~= nil then
         print("Sending", itemID)
         printtable(wowauditDataForItem(itemID, itemString))
-        addon:Send("group", "wishlist_data", itemID, entry.string, wowauditTimestamp,
-            wowauditDataForItem(itemID, entry.string), teamID, fromMasterLooter)
+        addon:Send("group", "wishlist_data", itemID, itemString, wowauditTimestamp,
+            wowauditDataForItem(itemID, itemString), teamID, fromMasterLooter)
     end
 end
 
