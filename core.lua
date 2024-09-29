@@ -6,6 +6,7 @@ local RCwowaudit = addon:NewModule("RCwowaudit", "AceComm-3.0", "AceConsole-3.0"
 
 wowauditValueDisplay = 'VALUE'
 wowauditDifficultyMatch = 'LENIENT'
+wowauditSharingSetting = 'NEWEST'
 
 local optionsTable = {
     type = "group",
@@ -42,6 +43,25 @@ local optionsTable = {
                                 db = addon:Getdb()
                                 db.wowauditDifficultyMatch = value
                                 wowauditDifficultyMatch = value
+                            end
+                        },
+                        SetSharingSetting = {
+                            type = "select",
+                            order = 2,
+                            name = "Shared data",
+                            width = "double",
+                            desc = "Choose what data to display when there is both shared data and data from your own desktop client.",
+                            values = {
+                                NEWEST = "Display the most recently synced data, regardless of source",
+                                SELF = "Prefer displaying data from own synced data, even if older"
+                            },
+                            get = function(info)
+                                return wowauditSharingSetting
+                            end,
+                            set = function(info, value)
+                                db = addon:Getdb()
+                                db.wowauditSharingSetting = value
+                                wowauditSharingSetting = value
                             end
                         }
                     }
@@ -94,4 +114,5 @@ function RCwowaudit:OnInitialize()
     db = addon:Getdb()
     wowauditValueDisplay = db.wowauditValueDisplay or "VALUE"
     wowauditDifficultyMatch = db.wowauditDifficultyMatch or "LENIENT"
+    wowauditSharingSetting = db.wowauditSharingSetting or "NEWEST"
 end

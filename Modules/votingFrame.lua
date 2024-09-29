@@ -15,11 +15,11 @@ function wowauditVotingFrame:OnInitialize()
 
     self:SecureHook(RCVotingFrame, "OnEnable", "AddButtonToFrame")
 
-    -- Translate sortNext into colNames (copied from RCLootCouncil_ExtraUtilities)
-    self.sortNext = {}
+    -- Translate sortnext into colNames (copied from RCLootCouncil_ExtraUtilities)
+    self.sortnext = {}
     for _, v in ipairs(RCVotingFrame.scrollCols) do
-        if v.sortNext then
-            self.sortNext[v.colName] = RCVotingFrame.scrollCols[v.sortNext].colName
+        if v.sortnext then
+            self.sortnext[v.colName] = RCVotingFrame.scrollCols[v.sortnext].colName
         end
     end
 
@@ -39,9 +39,6 @@ function wowauditVotingFrame:OnInitialize()
     })
 
     self:RegisterMessage("RCSessionChangedPre", "OnMessageReceived")
-end
-
-function wowauditVotingFrame:OnEnable()
     self:UpdateSortNext()
 end
 
@@ -168,14 +165,15 @@ end
 
 function wowauditVotingFrame:UpdateSortNext()
     for index in ipairs(RCVotingFrame.scrollCols) do
-        if RCVotingFrame.scrollCols[index].sortNext then
-            local exists = RCVotingFrame:GetColumnIndexFromName(self.sortNext[RCVotingFrame.scrollCols[index].colName])
-            RCVotingFrame.scrollCols[index].sortNext = exists
+        if RCVotingFrame.scrollCols[index].sortnext then
+            local exists = RCVotingFrame:GetColumnIndexFromName(self.sortnext[RCVotingFrame.scrollCols[index].colName])
+            RCVotingFrame.scrollCols[index].sortnext = exists
         end
     end
 
-    if RCVotingFrame.frame then
-        RCVotingFrame.frame.st:SetDisplayCols(RCVotingFrame.scrollCols)
-        RCVotingFrame.frame:SetWidth(RCVotingFrame.frame.st.frame:GetWidth() + 20)
+    local frame = RCVotingFrame:GetFrame()
+    if frame then
+        frame.st:SetDisplayCols(RCVotingFrame.scrollCols)
+        frame:SetWidth(frame.st.frame:GetWidth() + 20)
     end
 end
