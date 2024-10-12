@@ -6,16 +6,23 @@ local RCwowaudit = addon:GetModule("RCwowaudit")
 local wowauditShareData = RCwowaudit:NewModule("wowauditShareData", "AceComm-3.0", "AceConsole-3.0", "AceHook-3.0",
     "AceEvent-3.0", "AceTimer-3.0", "AceSerializer-3.0")
 
+RCwowaudit.PREFIXES = {
+    MAIN = "wowauditMain"
+}
+
 function wowauditShareData:OnInitialize()
+    RCwowaudit.Send = Comms:GetSender(RCwowaudit.PREFIXES.MAIN)
+
     self:RegisterMessage("RCMLAddItem", "OnMessageReceived")
 
-    Comms:Subscribe(addon.PREFIXES.MAIN, "wishlist_data", function(data, sender)
-        self:OnWishlistDataReceived(unpack(data))
-    end)
-
-    Comms:Subscribe(addon.PREFIXES.MAIN, "request_wishlist_data", function(data, sender)
-        self:OnWishlistDataRequested(unpack(data))
-    end)
+    Comms:BulkSubscribe(RCwowaudit.PREFIXES.MAIN, {
+        wishlist_data = function(data, sender)
+            self:OnWishlistDataReceived(unpack(data))
+        end,
+        request_wishlist_data = function(data, sender)
+            self:OnWishlistDataRequested(unpack(data))
+        end
+    })
 end
 
 function wowauditShareData:OnMessageReceived(msg, ...)
@@ -24,7 +31,7 @@ function wowauditShareData:OnMessageReceived(msg, ...)
         local itemID = ItemUtils:GetItemIDFromLink(item)
 
         if wowauditTimestamp == nil then
-            addon:Send("group", "request_wishlist_data", itemID, entry.string)
+            RCwowaudit:Send("group", "request_wishlist_data", itemID, entry.string)
         else
             self:SendWishlistData(itemID, entry.string, true)
         end
@@ -33,7 +40,7 @@ end
 
 function wowauditShareData:SendWishlistData(itemID, itemString, fromMasterLooter)
     if itemID and wowauditTimestamp ~= nil then
-        addon:Send("group", "wishlist_data", itemID, itemString, wowauditTimestamp,
+        RCwowaudit:Send("group", "wishlist_data", itemID, itemString, wowauditTimestamp,
             wowauditDataForItem(itemID, itemString), teamID or 0, fromMasterLooter)
     end
 end
