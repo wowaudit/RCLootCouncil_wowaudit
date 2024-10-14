@@ -86,6 +86,7 @@ function wowauditVotingFrame:SetCellWishlistNote(frame, data, cols, row, realrow
         local text = ""
         if wishes then
             for i, wish in ipairs(wishes) do
+                wish = transformWish(wish)
                 if wish.comment then
                     text = text .. specIcon(wish.spec, 12) .. wish.comment .. "\n\n"
                 end

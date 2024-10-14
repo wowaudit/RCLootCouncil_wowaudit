@@ -20,7 +20,7 @@ function wowauditLootFrame:HookGetEntry(_, item)
         local frame = RCLootFrame.EntryManager:GetEntry(item)
         if not self:IsHooked(frame, "Update") then
             self:SecureHook(frame, "Update", "HookEntryUpdate")
-            frame:Update()
+            self:HookEntryUpdate(frame)
         end
     end
     hookRunning = false

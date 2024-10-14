@@ -120,6 +120,7 @@ highestWishValue = function(wishes)
     local highest = 0
     if wishes then
         for i, wish in ipairs(wishes) do
+            wish = transformWish(wish)
             local value = tonumber(wowauditValueDisplay == "VALUE" and wish.value or wish.percent)
 
             if value and value > highest then
@@ -133,6 +134,7 @@ end
 
 displayWish = function(wish)
     local displayValue
+    wish = transformWish(wish)
 
     if wowauditValueDisplay == "VALUE" then
         displayValue = wish.value
@@ -145,6 +147,15 @@ displayWish = function(wish)
     end
 
     return specIcon(wish.spec, 12) .. withColor(displayValue, wish.status)
+end
+
+transformWish = function(wish)
+    wish.spec = wish.sp or wish.spec
+    wish.status = wish.s or wish.status
+    wish.value = wish.v or wish.value
+    wish.percent = wish.p or wish.percent
+    wish.comment = wish.c or wish.comment
+    return wish
 end
 
 getNextDifficulty = function(currentDifficulty)
