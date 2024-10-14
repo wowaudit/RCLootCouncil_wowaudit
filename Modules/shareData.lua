@@ -7,7 +7,7 @@ local wowauditShareData = RCwowaudit:NewModule("wowauditShareData", "AceComm-3.0
     "AceEvent-3.0", "AceTimer-3.0", "AceSerializer-3.0")
 
 RCwowaudit.PREFIXES = {
-    MAIN = "wowauditMain"
+    MAIN = "RCau"
 }
 
 function wowauditShareData:OnInitialize()

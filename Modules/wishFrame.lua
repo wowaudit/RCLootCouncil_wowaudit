@@ -91,6 +91,7 @@ function wowauditWishFrame:Show()
         charactersFound = charactersFound + 1
         for difficulty, items in pairs(difficulties) do
             for _, item in ipairs(items) do
+                item = transformWish(item)
                 local row = {}
                 local name, link, _, _, _, _, _, _, _ = C_Item.GetItemInfo(item.id)
 
