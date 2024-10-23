@@ -1,10 +1,10 @@
-## Interface: 110002
+## Interface: 110005
 
 ## Title: RCLootCouncil - wowaudit
 ## Description: Display wowaudit wishlist information in the RCLootCouncil roll and voting frames, and enable loot history statistics on wowaudit
 ## Notes: Display wowaudit wishlist information in the RCLootCouncil roll and voting frames, and enable loot history statistics on wowaudit
 ## Author: Emiel van Lankveld
-## Version: 1.0.4
+## Version: 1.0.5
 ## Dependencies: RCLootCouncil
 ## IconTexture: Interface\AddOns\RCLootCouncil_wowaudit\Media\logo
 
