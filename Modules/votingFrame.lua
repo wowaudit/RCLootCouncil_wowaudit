@@ -58,7 +58,7 @@ function wowauditVotingFrame:SetCellWishlist(frame, data, cols, row, realrow, co
         local text = ""
         if wishes then
             for i, wish in ipairs(wishes) do
-                text = (i == 3 and "\n" or "") .. text .. displayWish(wish) .. (i == 2 and "" or "    ")
+                text = text .. displayWish(wish) .. "    "
             end
 
             if wishes[1] and wishes[1].difficulty then
@@ -88,7 +88,7 @@ function wowauditVotingFrame:SetCellWishlistNote(frame, data, cols, row, realrow
             for i, wish in ipairs(wishes) do
                 wish = transformWish(wish)
                 if wish.comment then
-                    text = text .. specIcon(wish.spec, 12) .. wish.comment .. "\n\n"
+                    text = text .. specIcon(wish.spec, 12) .. " " .. wish.comment .. "\n\n"
                 end
             end
         end

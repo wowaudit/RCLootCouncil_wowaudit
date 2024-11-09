@@ -301,7 +301,7 @@ logoIcon = "|TInterface\\AddOns\\RCLootCouncil_wowaudit\\Media\\logo:16:16:0:0:0
 specIcon = function(specID, iconSize)
     local L, R, T, B = unpack(specCoords[specID])
     return "|TInterface\\AddOns\\RCLootCouncil_wowaudit\\Media\\spec_icons_normal:" .. iconSize .. ":" .. iconSize ..
-               ":0:0:512:512:" .. (L * 512) .. ":" .. (R * 512) .. ":" .. (T * 512) .. ":" .. (B * 512) .. "|t "
+               ":0:0:512:512:" .. (L * 512) .. ":" .. (R * 512) .. ":" .. (T * 512) .. ":" .. (B * 512) .. "|t"
 end
 
 -- https://wowpedia.fandom.com/wiki/ItemLink
