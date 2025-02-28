@@ -1,4 +1,4 @@
-## Deploying
+## RCLootCouncil_wowaudit
 
-1. `zip -r RCLootCouncil_wowaudit.zip RCLootCouncil_wowaudit -x "*.DS_Store" -x RCLootCouncil_wowaudit/.git/\*`
-2. Upload to Curseforge.
+- https://www.curseforge.com/wow/addons/rclootcouncil-wowaudit
+- https://addons.wago.io/addons/rclootcouncil-wowaudit
