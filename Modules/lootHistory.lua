@@ -30,7 +30,7 @@ function wowauditLootHistory:EnrichLootHistory(history_table, winner, responseID
                 local itemString = ItemUtils:GetItemStringFromLink(history_table["lootWon"])
 
                 entry["same_response_amount"] = self:CountSameResponseAsWinner(session, responseID)
-                entry["wishes"] = wowauditDataForCharacter(itemID, itemString, winner)
+                entry["wishes"] = wowauditDataForCharacter(itemID, string.sub(itemString, 6), winner)
             end
         end
     end
