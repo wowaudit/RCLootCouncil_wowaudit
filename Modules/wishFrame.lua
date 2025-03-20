@@ -56,7 +56,9 @@ function wowauditWishFrame:SetupColumns()
         width = 150
     }, {
         name = "Item",
-        width = 180
+        width = 180,
+        comparesort = self.StringSort,
+        DoCellUpdate = self.SetItemLink
     }, {
         name = "",
         width = 20
@@ -108,7 +110,10 @@ function wowauditWishFrame:Show()
                 row[self.colNameToIndex.difficulty] = DIFFICULTIES[difficulty]
                 row[self.colNameToIndex.class] = CreateAtlasMarkup(specToClassIcon[item.spec], 16, 16)
                 row[self.colNameToIndex.name] = character
-                row[self.colNameToIndex.item] = name
+                row[self.colNameToIndex.item] = {
+                    value = link,
+                    sortValue = name
+                }
                 row[self.colNameToIndex.spec] = specIcon(item.spec, 16)
                 row[self.colNameToIndex.status] = withColor(STATUSES[item.status], item.status)
                 row[self.colNameToIndex.value] = {
@@ -169,8 +174,6 @@ function wowauditWishFrame:GetFrame()
     return f
 end
 
--- Not used for now:
--- Using actual links doesn't work unless the player has the item in their cache already (otherwise it'll be invisible)
 function wowauditWishFrame:SetItemLink(frame, data, cols, row, realrow, column, fShow, table, ...)
     local itemLink = data[realrow][column].value
 
@@ -185,7 +188,6 @@ function wowauditWishFrame:SetItemLink(frame, data, cols, row, realrow, column, 
     frame:Show()
 end
 
--- Not used for now:
 -- This doesn't work properly when the table is scrolled, the button is sticky and doesn't respect the row
 function wowauditWishFrame:SetWishNote(frame, data, cols, row, realrow, column, fShow, table, ...)
     local note = data[realrow][column].value
@@ -218,8 +220,6 @@ function wowauditWishFrame:NumberSort(rowa, rowb, sortbycol)
     end
 end
 
--- Not used for now:
--- Only needed when displaying actual item links
 function wowauditWishFrame:StringSort(rowa, rowb, sortbycol)
     local column = self.cols[sortbycol]
     a, b = self:GetRow(rowa)[sortbycol].sortValue, self:GetRow(rowb)[sortbycol].sortValue;
