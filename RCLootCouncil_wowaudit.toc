@@ -1,4 +1,4 @@
-## Interface: 110010
+## Interface: 110100
 
 ## Title: RCLootCouncil - wowaudit
 ## Description: Display wowaudit wishlist information in the RCLootCouncil roll and voting frames, and enable loot history statistics on wowaudit
