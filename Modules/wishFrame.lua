@@ -20,10 +20,14 @@ local STATUSES = {
     o = "Outdated" -- outdated
 }
 
+local uncachedItems = {}
+
 function wowauditWishFrame:OnInitialize()
     if not addon.optionsFrame then -- RCLootCouncil hasn't been initialized.
         return self:ScheduleTimer("OnInitialize", 0.5)
     end
+
+    self:RegisterEvent("GET_ITEM_INFO_RECEIVED")
 
     addon:ModuleChatCmd(self, "Show", nil, "Show synchronised wishlist data from wowaudit", "wishes", "wowaudit",
         "wishlists")
@@ -95,6 +99,10 @@ function wowauditWishFrame:Show()
                 local row = {}
                 local name, link, _, _, _, _, _, _, _ = C_Item.GetItemInfo(item.id)
 
+                if not name then
+                    uncachedItems[item.id] = true
+                end
+
                 if tonumber(item.percent) then
                     row[self.colNameToIndex.percent] = {
                         value = withColor(item.percent .. "%", item.status),
@@ -111,7 +119,7 @@ function wowauditWishFrame:Show()
                 row[self.colNameToIndex.class] = CreateAtlasMarkup(specToClassIcon[item.spec], 16, 16)
                 row[self.colNameToIndex.name] = character
                 row[self.colNameToIndex.item] = {
-                    value = link,
+                    value = link or ("Loading ... (" .. item.id .. ")"),
                     sortValue = name
                 }
                 row[self.colNameToIndex.spec] = specIcon(item.spec, 16)
@@ -229,5 +237,15 @@ function wowauditWishFrame:StringSort(rowa, rowb, sortbycol)
         return (a or "") < (b or "")
     else
         return (a or "") > (b or "")
+    end
+end
+
+function wowauditWishFrame:GET_ITEM_INFO_RECEIVED(event, itemId, success)
+    if success and uncachedItems and uncachedItems[itemId] then
+        uncachedItems[itemId] = nil
+        if not next(uncachedItems) then
+            self:UnregisterEvent("GET_ITEM_INFO_RECEIVED")
+            self:Show()
+        end
     end
 end
