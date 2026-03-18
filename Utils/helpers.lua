@@ -241,69 +241,15 @@ specToClassIcon = {
     [1473] = "classicon-evoker"
 }
 
--- Copied from Details/functions/profiles.lua
-specCoords = {
-    [577] = {128 / 512, 192 / 512, 256 / 512, 320 / 512}, -- havoc demon hunter
-    [581] = {192 / 512, 256 / 512, 256 / 512, 320 / 512}, -- vengeance demon hunter
-    [1480] = {128 / 512, 192 / 512, 256 / 512, 320 / 512}, -- devourer demon hunter (shows as havoc for now)
-
-    [250] = {0, 64 / 512, 0, 64 / 512}, -- blood dk
-    [251] = {64 / 512, 128 / 512, 0, 64 / 512}, -- frost dk
-    [252] = {128 / 512, 192 / 512, 0, 64 / 512}, -- unholy dk
-
-    [102] = {192 / 512, 256 / 512, 0, 64 / 512}, -- druid balance
-    [103] = {256 / 512, 320 / 512, 0, 64 / 512}, -- druid feral
-    [104] = {320 / 512, 384 / 512, 0, 64 / 512}, -- druid guardian
-    [105] = {384 / 512, 448 / 512, 0, 64 / 512}, -- druid resto
-
-    [253] = {448 / 512, 512 / 512, 0, 64 / 512}, -- hunter bm
-    [254] = {0, 64 / 512, 64 / 512, 128 / 512}, -- hunter marks
-    [255] = {64 / 512, 128 / 512, 64 / 512, 128 / 512}, -- hunter survivor
-
-    [62] = {(128 / 512) + 0.001953125, 192 / 512, 64 / 512, 128 / 512}, -- mage arcane
-    [63] = {192 / 512, 256 / 512, 64 / 512, 128 / 512}, -- mage fire
-    [64] = {256 / 512, 320 / 512, 64 / 512, 128 / 512}, -- mage frost
-
-    [268] = {320 / 512, 384 / 512, 64 / 512, 128 / 512}, -- monk bm
-    [269] = {448 / 512, 512 / 512, 64 / 512, 128 / 512}, -- monk ww
-    [270] = {384 / 512, 448 / 512, 64 / 512, 128 / 512}, -- monk mw
-
-    [65] = {0, 64 / 512, 128 / 512, 192 / 512}, -- paladin holy
-    [66] = {64 / 512, 128 / 512, 128 / 512, 192 / 512}, -- paladin protect
-    [70] = {(128 / 512) + 0.001953125, 192 / 512, 128 / 512, 192 / 512}, -- paladin ret
-
-    [256] = {192 / 512, 256 / 512, 128 / 512, 192 / 512}, -- priest disc
-    [257] = {256 / 512, 320 / 512, 128 / 512, 192 / 512}, -- priest holy
-    [258] = {(320 / 512) + (0.001953125 * 4), 384 / 512, 128 / 512, 192 / 512}, -- priest shadow
-
-    [259] = {384 / 512, 448 / 512, 128 / 512, 192 / 512}, -- rogue assassination
-    [260] = {448 / 512, 512 / 512, 128 / 512, 192 / 512}, -- rogue combat
-    [261] = {0, 64 / 512, 192 / 512, 256 / 512}, -- rogue sub
-
-    [262] = {64 / 512, 128 / 512, 192 / 512, 256 / 512}, -- shaman elemental
-    [263] = {128 / 512, 192 / 512, 192 / 512, 256 / 512}, -- shamel enhancement
-    [264] = {192 / 512, 256 / 512, 192 / 512, 256 / 512}, -- shaman resto
-
-    [265] = {256 / 512, 320 / 512, 192 / 512, 256 / 512}, -- warlock aff
-    [266] = {320 / 512, 384 / 512, 192 / 512, 256 / 512}, -- warlock demo
-    [267] = {384 / 512, 448 / 512, 192 / 512, 256 / 512}, -- warlock destro
-
-    [71] = {448 / 512, 512 / 512, 192 / 512, 256 / 512}, -- warrior arms
-    [72] = {0, 64 / 512, 256 / 512, 320 / 512}, -- warrior fury
-    [73] = {64 / 512, 128 / 512, 256 / 512, 320 / 512}, -- warrior protect
-
-    [1467] = {256 / 512, 320 / 512, 256 / 512, 320 / 512}, -- Devastation
-    [1468] = {320 / 512, 384 / 512, 256 / 512, 320 / 512}, -- Preservation
-    [1473] = {384 / 512, 448 / 512, 256 / 512, 320 / 512} -- Augmentation
-}
-
 logoIconSmall = "|TInterface\\AddOns\\RCLootCouncil_wowaudit\\Media\\logo:12:12:0:0:0:0:0:0:0:0|t"
 logoIcon = "|TInterface\\AddOns\\RCLootCouncil_wowaudit\\Media\\logo:16:16:0:0:0:0:0:0:0:0|t"
 
 specIcon = function(specID, iconSize)
-    local L, R, T, B = unpack(specCoords[specID])
-    return "|TInterface\\AddOns\\RCLootCouncil_wowaudit\\Media\\spec_icons_normal:" .. iconSize .. ":" .. iconSize ..
-               ":0:0:512:512:" .. (L * 512) .. ":" .. (R * 512) .. ":" .. (T * 512) .. ":" .. (B * 512) .. "|t"
+    local icon = select(4, GetSpecializationInfoByID(specID))
+    if not icon then
+        return ""
+    end
+    return "\124T"..icon..":"..iconSize..":"..iconSize..":0:0:64:64:4:60:4:60\124t"
 end
 
 -- https://wowpedia.fandom.com/wiki/ItemLink
