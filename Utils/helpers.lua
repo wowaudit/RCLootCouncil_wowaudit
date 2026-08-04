@@ -243,6 +243,23 @@ specToClassIcon = {
 
 logoIconSmall = "|TInterface\\AddOns\\RCLootCouncil_wowaudit\\Media\\logo:12:12:0:0:0:0:0:0:0:0|t"
 logoIcon = "|TInterface\\AddOns\\RCLootCouncil_wowaudit\\Media\\logo:16:16:0:0:0:0:0:0:0:0|t"
+dicesIcon = "|TInterface\\AddOns\\RCLootCouncil_wowaudit\\Media\\dices:12:12:0:0:0:0:0:0:0:0|t"
+
+isBonusRollTarget = function(encounterID, name)
+    if not encounterID or not name then
+        return false
+    end
+    local targets = bonusRollTargets and bonusRollTargets[encounterID]
+    if not targets then
+        return false
+    end
+    for _, target in ipairs(targets) do
+        if target == name then
+            return true
+        end
+    end
+    return false
+end
 
 specIcon = function(specID, iconSize)
     local icon = select(4, GetSpecializationInfoByID(specID))

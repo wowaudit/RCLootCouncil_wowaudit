@@ -44,9 +44,10 @@ end
 
 function wowauditVotingFrame:SetCellWishlist(frame, data, cols, row, realrow, column, fShow, table, ...)
     local lootTable = addon:GetLootTable()
+    local prefix = isBonusRollTarget(addon.lastEncounterID, data[realrow].name) and (dicesIcon .. " ") or ""
 
     if not wowauditDataPresent() then
-        local text = withColor("no data found", "o")
+        local text = prefix .. withColor("no data found", "o")
         frame.text:SetText(text)
         data[realrow].cols[column].value = text
         return
@@ -67,14 +68,16 @@ function wowauditVotingFrame:SetCellWishlist(frame, data, cols, row, realrow, co
         end
 
         if string.len(text) > 0 then
+            text = prefix .. text
             frame.text:SetText(text)
             data[realrow].cols[column].value = text
             return
         end
     end
 
-    frame.text:SetText("-")
-    data[realrow].cols[column].value = "-"
+    local text = prefix .. "-"
+    frame.text:SetText(text)
+    data[realrow].cols[column].value = text
 end
 
 function wowauditVotingFrame:SetCellWishlistNote(frame, data, cols, row, realrow, column, fShow, table, ...)
