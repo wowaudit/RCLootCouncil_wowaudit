@@ -28,9 +28,6 @@ function wowauditWishFrame:OnInitialize()
     end
 
     self:RegisterEvent("GET_ITEM_INFO_RECEIVED")
-
-    addon:ModuleChatCmd(self, "Show", nil, "Show synchronised wishlist data from wowaudit", "wishes", "wowaudit",
-        "wishlists")
 end
 
 function wowauditWishFrame:OnEnable()

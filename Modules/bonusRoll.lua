@@ -1,6 +1,6 @@
 local addon = LibStub("AceAddon-3.0"):GetAddon("RCLootCouncil")
 local RCwowaudit = addon:GetModule("RCwowaudit")
-local wowauditBonusRoll = RCwowaudit:NewModule("wowauditBonusRoll", "AceComm-3.0", "AceSerializer-3.0", "AceTimer-3.0")
+local wowauditBonusRoll = RCwowaudit:NewModule("wowauditBonusRoll", "AceComm-3.0", "AceSerializer-3.0")
 
 local CURRENCY_ID = 3418
 local COMM_PREFIX = "WowauditCoins"
@@ -28,24 +28,7 @@ local function playerFullName()
 end
 
 function wowauditBonusRoll:OnInitialize()
-    if not addon.optionsFrame then -- RCLootCouncil hasn't been initialized.
-        return self:ScheduleTimer("OnInitialize", 0.5)
-    end
-
     self:RegisterComm(COMM_PREFIX)
-
-    -- Delegate the window to the companion addon, which owns the UI/roster logic.
-    addon:ModuleChatCmd(self, "ShowBonusRolls", "coins",
-        "Open the wowaudit bonus roll window (alt. 'bonusrolls')", "coins", "bonusrolls")
-end
-
-function wowauditBonusRoll:ShowBonusRolls()
-    local companion = LibStub("AceAddon-3.0"):GetAddon("WowauditBonusRoll", true)
-    if companion and companion.ShowWindow then
-        companion:ShowWindow()
-    else
-        addon:Print("The Wowaudit Companion addon is required to view the bonus roll window.")
-    end
 end
 
 function wowauditBonusRoll:OnCommReceived(_, msg, _, sender)

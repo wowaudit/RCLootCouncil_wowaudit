@@ -243,7 +243,7 @@ specToClassIcon = {
 
 logoIconSmall = "|TInterface\\AddOns\\RCLootCouncil_wowaudit\\Media\\logo:12:12:0:0:0:0:0:0:0:0|t"
 logoIcon = "|TInterface\\AddOns\\RCLootCouncil_wowaudit\\Media\\logo:16:16:0:0:0:0:0:0:0:0|t"
-dicesIcon = "|TInterface\\AddOns\\RCLootCouncil_wowaudit\\Media\\dices:12:12:0:0:0:0:0:0:0:0|t"
+diceIcon = "|TInterface\\AddOns\\RCLootCouncil_wowaudit\\Media\\dice:14:14:0:0:0:0:0:0:0:0|t"
 
 isBonusRollTarget = function(encounterID, name)
     if not encounterID or not name then

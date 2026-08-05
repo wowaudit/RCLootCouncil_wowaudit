@@ -115,4 +115,24 @@ function RCwowaudit:OnInitialize()
     wowauditValueDisplay = db.wowauditValueDisplay or "VALUE"
     wowauditDifficultyMatch = db.wowauditDifficultyMatch or "LENIENT"
     wowauditSharingSetting = db.wowauditSharingSetting or "NEWEST"
+
+    -- Register all "/rc" subcommands from this single module so they share one help header.
+    addon:ModuleChatCmd(self, "ShowWishes", nil, "Show synchronised wishlist data from wowaudit", "wishes", "wowaudit",
+        "wishlists")
+    addon:ModuleChatCmd(self, "ShowBonusRolls", "bonusrolls", "Display available and earned bonus rolls for your raid group and guild (alt. 'coins')",
+        "bonusrolls", "coins")
+end
+
+function RCwowaudit:ShowWishes()
+    self:GetModule("wowauditWishFrame"):Show()
+end
+
+-- The bonus roll window lives in the Wowaudit Companion addon.
+function RCwowaudit:ShowBonusRolls()
+    local companion = LibStub("AceAddon-3.0"):GetAddon("WowauditBonusRoll", true)
+    if companion and companion.ShowWindow then
+        companion:ShowWindow()
+    else
+        addon:Print("The Wowaudit Companion addon is required to view the bonus roll window.")
+    end
 end
