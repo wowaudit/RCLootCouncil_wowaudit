@@ -88,6 +88,7 @@ function wowauditWishFrame:Show()
     local rows = {}
     local charactersFound = 0
     local wishesFound = 0
+    local seenPriorityItems = {}
     for character, difficulties in pairs(wishlistData) do
         charactersFound = charactersFound + 1
         for difficulty, items in pairs(difficulties) do
@@ -112,6 +113,13 @@ function wowauditWishFrame:Show()
                     }
                 end
 
+                local priority = trinketPriorities[character] and trinketPriorities[character][item.id]
+                local valueText = withColor(item.value, item.status)
+                if priority then
+                    valueText = priorityLabel(priority) .. ", " .. valueText
+                    seenPriorityItems[character .. ":" .. item.id] = true
+                end
+
                 row[self.colNameToIndex.difficulty] = DIFFICULTIES[difficulty]
                 row[self.colNameToIndex.class] = CreateAtlasMarkup(specToClassIcon[item.spec], 16, 16)
                 row[self.colNameToIndex.name] = character
@@ -122,12 +130,47 @@ function wowauditWishFrame:Show()
                 row[self.colNameToIndex.spec] = specIcon(item.spec, 16)
                 row[self.colNameToIndex.status] = withColor(STATUSES[item.status], item.status)
                 row[self.colNameToIndex.value] = {
-                    value = withColor(item.value, item.status),
+                    value = valueText,
                     sortValue = item.value
                 }
                 -- row[self.colNameToIndex.note] = {
                 --     value = item.comment or ""
                 -- }
+                tinsert(rows, row)
+                wishesFound = wishesFound + 1
+            end
+        end
+    end
+
+    for character, items in pairs(trinketPriorities or {}) do
+        if not wishlistData[character] then
+            charactersFound = charactersFound + 1
+        end
+        for itemID, rank in pairs(items) do
+            if not seenPriorityItems[character .. ":" .. itemID] then
+                local name, link, _, _, _, _, _, _, _ = C_Item.GetItemInfo(itemID)
+                if not name then
+                    uncachedItems[itemID] = true
+                end
+
+                local row = {}
+                row[self.colNameToIndex.difficulty] = ""
+                row[self.colNameToIndex.class] = ""
+                row[self.colNameToIndex.name] = character
+                row[self.colNameToIndex.item] = {
+                    value = link or ("Loading ... (" .. itemID .. ")"),
+                    sortValue = name
+                }
+                row[self.colNameToIndex.spec] = ""
+                row[self.colNameToIndex.status] = ""
+                row[self.colNameToIndex.value] = {
+                    value = priorityLabel(rank),
+                    sortValue = 0
+                }
+                row[self.colNameToIndex.percent] = {
+                    value = "",
+                    sortValue = 0
+                }
                 tinsert(rows, row)
                 wishesFound = wishesFound + 1
             end

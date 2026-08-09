@@ -38,7 +38,7 @@ function wowauditLootFrame.HookEntryUpdate(_, entry)
         if session then
             local wishes = wowauditDataToDisplay(lootTable[session].itemID, lootTable[session].string, addon.playerName)
             local priority = trinketPriorityToDisplay(lootTable[session].itemID, addon.playerName)
-            local prefix = priority and (priorityLabel(priority) .. " " .. logoIcon) or logoIcon
+            local priorityText = priority and (priorityLabel(priority) .. " ") or ""
 
             local wishText = ""
             if wishes then
@@ -52,11 +52,13 @@ function wowauditLootFrame.HookEntryUpdate(_, entry)
             end
 
             if string.len(wishText) > 0 then
-                entry.itemLvl:SetText(text .. " - " .. prefix .. " " .. wishText)
+                entry.itemLvl:SetText(text .. " - " .. logoIcon .. " " .. priorityText .. wishText)
                 return
             end
 
-            entry.itemLvl:SetText(text .. " - " .. prefix .. withColor(' not on wishlist', 'n'))
+            entry.itemLvl:SetText(
+                text .. " - " .. logoIcon .. " " .. priorityText .. withColor('not on wishlist', 'n')
+            )
         end
     end
 end
