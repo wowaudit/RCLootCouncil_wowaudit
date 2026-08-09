@@ -1,4 +1,5 @@
 sharedWowauditData = {}
+trinketPriorities = trinketPriorities or {}
 
 local itemContextDifficulties = {
     ["3"] = "N",
@@ -244,6 +245,58 @@ specToClassIcon = {
 logoIconSmall = "|TInterface\\AddOns\\RCLootCouncil_wowaudit\\Media\\logo:12:12:0:0:0:0:0:0:0:0|t"
 logoIcon = "|TInterface\\AddOns\\RCLootCouncil_wowaudit\\Media\\logo:16:16:0:0:0:0:0:0:0:0|t"
 diceIcon = "|TInterface\\AddOns\\RCLootCouncil_wowaudit\\Media\\dice:14:14:0:0:0:0:0:0:0:0|t"
+
+priorityLabel = function(rank)
+    if not rank then
+        return nil
+    end
+    return "|cnDIM_GREEN_FONT_COLOR:P" .. rank .. "|r"
+end
+
+trinketPrioritiesForItem = function(itemID)
+    local priorities = {}
+    if not itemID or not trinketPriorities then
+        return priorities
+    end
+
+    for character, items in pairs(trinketPriorities) do
+        local rank = items[itemID]
+        if rank then
+            priorities[character] = rank
+        end
+    end
+
+    return priorities
+end
+
+trinketPriorityToDisplay = function(itemID, name)
+    if not itemID or not name then
+        return nil
+    end
+
+    local rank = nil
+    local timestamp = nil
+
+    for _, team in pairs(sharedWowauditData) do
+        local sharedRank = team["priorities"] and team["priorities"][itemID] and team["priorities"][itemID][name]
+        if sharedRank and (not timestamp or team["timestamp"] > timestamp) then
+            rank = sharedRank
+            timestamp = team["timestamp"]
+        end
+    end
+
+    if wowauditTimestamp ~= nil and trinketPriorities[name] and trinketPriorities[name][itemID] then
+        local ownRank = trinketPriorities[name][itemID]
+        if wowauditSharingSetting == 'SELF' then
+            return ownRank
+        end
+        if timestamp == nil or wowauditTimestamp > timestamp then
+            return ownRank
+        end
+    end
+
+    return rank
+end
 
 isBonusRollTarget = function(encounterID, name)
     if not encounterID or not name then

@@ -41,22 +41,28 @@ end
 function wowauditShareData:SendWishlistData(itemID, itemString, fromMasterLooter)
     if itemID and wowauditTimestamp ~= nil then
         RCwowaudit:Send("group", "wishlist_data", itemID, itemString, wowauditTimestamp,
-            wowauditDataForItem(itemID, itemString), teamID or 0, fromMasterLooter)
+            wowauditDataForItem(itemID, itemString), teamID or 0, fromMasterLooter,
+            trinketPrioritiesForItem(itemID))
     end
 end
 
-function wowauditShareData:OnWishlistDataReceived(itemID, itemString, timestamp, wishes, team, fromMasterLooter)
+function wowauditShareData:OnWishlistDataReceived(itemID, itemString, timestamp, wishes, team, fromMasterLooter, priorities)
     if sharedWowauditData[team] == nil then
         sharedWowauditData[team] = {
             timestamp = timestamp,
             wishes = {
                 [itemID] = wishes
+            },
+            priorities = {
+                [itemID] = priorities or {}
             }
         }
     else
         if sharedWowauditData[team]["wishes"][itemID] == nil or timestamp > sharedWowauditData[team]["timestamp"] then
             sharedWowauditData[team]["timestamp"] = timestamp
             sharedWowauditData[team]["wishes"][itemID] = wishes
+            sharedWowauditData[team]["priorities"] = sharedWowauditData[team]["priorities"] or {}
+            sharedWowauditData[team]["priorities"][itemID] = priorities or {}
         end
     end
 
