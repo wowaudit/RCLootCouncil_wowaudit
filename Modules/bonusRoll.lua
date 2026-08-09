@@ -60,6 +60,7 @@ function wowauditBonusRoll:OnCommReceived(_, msg, _, sender)
     local _, _, classId = UnitClass("player")
     self:SendCommMessage(COMM_PREFIX, self:Serialize({
         cmd = "RESP",
+        currencyId = CURRENCY_ID,
         left = info.quantity or 0,
         earned = info.totalEarned or 0,
         cap = info.maxQuantity or 0,
