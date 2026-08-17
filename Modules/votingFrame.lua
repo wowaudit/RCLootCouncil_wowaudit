@@ -46,7 +46,9 @@ function wowauditVotingFrame:SetCellWishlist(frame, data, cols, row, realrow, co
     local lootTable = addon:GetLootTable()
     local itemID = lootTable and lootTable[session] and lootTable[session].itemID
     local priority = trinketPriorityToDisplay(itemID, data[realrow].name)
-    local prefix = priority and (priorityLabel(priority) .. " ") or (diceIcon .. " ")
+    local bonus = isBonusRollTarget(addon.lastEncounterID, data[realrow].name)
+    local prefix = (priority and (priorityLabel(priority) .. " ") or "")
+        .. (bonus and (diceIcon .. " ") or "")
 
     if not wowauditDataPresent() then
         local text = prefix .. withColor("no data found", "o")
