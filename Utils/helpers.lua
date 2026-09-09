@@ -204,7 +204,11 @@ textColors = {
 }
 
 withColor = function(text, colorKey)
-    return "|cn" .. textColors[colorKey] .. ":" .. (text or "error") .. "|r"
+    local color = textColors[colorKey]
+    if not color then
+        return text or ""
+    end
+    return "|cn" .. color .. ":" .. (text or "error") .. "|r"
 end
 
 specToClassIcon = {

@@ -101,10 +101,26 @@ function wowauditShareData:OnProfileReceived(sender, data)
     data.cr = type(data.cr) == "table" and data.cr or {}
     data.eq = type(data.eq) == "table" and data.eq or {}
     sharedWowauditProfiles[name] = data
+    -- AceComm's sender string is not always the loot-table candidate key.
+    if sender ~= name then
+        sharedWowauditProfiles[sender] = data
+    end
+end
+
+-- One request per loot table. Reopening the window is not another raid-wide
+-- ask; a new loot table is, so a council member who missed the first wave can
+-- still recover.
+local allowProfileRequest = true
+
+function wowauditShareData:AllowProfileRequest()
+    allowProfileRequest = true
 end
 
 function wowauditShareData:RequestProfiles()
-    if IsInGroup() then
-        RCwowaudit:Send("group", "request_profile")
+    if not IsInGroup() or not allowProfileRequest then
+        return
     end
+
+    allowProfileRequest = false
+    RCwowaudit:Send("group", "request_profile")
 end

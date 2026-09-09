@@ -11,6 +11,8 @@ local SEND_THROTTLE = 5
 local profile = nil
 local lastSentSignature = nil
 local lastSentAt = 0
+local pendingSend
+local pendingReplay
 
 local function playerName()
     return addon.player and addon.player:GetName() or addon.playerName
@@ -61,7 +63,7 @@ function wowauditGearProfile:Build()
     local bonusRoll = wowauditBonusRollInfo()
 
     profile = {
-        il = math.floor(select(2, GetAverageItemLevel())),
+        il = math.floor(tonumber((select(2, GetAverageItemLevel()))) or 0),
         cat = catalyst and catalyst.amount or nil,
         br = bonusRoll and {
             q = bonusRoll.left,
@@ -100,15 +102,21 @@ local function signatureFor(data)
     return table.concat(parts, ":")
 end
 
-function wowauditGearProfile:Send(force)
+function wowauditGearProfile:Send(force, replay)
+    local data = self:Build()
     if not IsInGroup() then
         return
     end
 
-    local data = self:Build()
     local signature = signatureFor(data)
 
-    if not force and signature == lastSentSignature and GetTime() - lastSentAt < SEND_THROTTLE then
+    -- Loot ack and votes skip an unchanged snapshot. A replay is someone who
+    -- missed that broadcast asking us to put it on the wire again.
+    if not replay and signature == lastSentSignature then
+        return
+    end
+
+    if not force and not replay and GetTime() - lastSentAt < SEND_THROTTLE then
         return
     end
 
@@ -117,8 +125,25 @@ function wowauditGearProfile:Send(force)
     RCwowaudit:Send("group", "profile", data)
 end
 
+function wowauditGearProfile:ScheduleSend(replay)
+    pendingReplay = pendingReplay or replay
+    if pendingSend then
+        return
+    end
+
+    -- Spread replies so a full raid answering one request (or acking the same
+    -- loot table) doesn't land in a single frame.
+    pendingSend = self:ScheduleTimer(function()
+        pendingSend = nil
+        local replayNow = pendingReplay
+        pendingReplay = nil
+        wowauditGearProfile:Send(false, replayNow)
+    end, 0.5 + math.random() * 2)
+end
+
 function wowauditGearProfile:OnLootAckSent()
-    self:Send(true)
+    self:Build()
+    self:ScheduleSend()
 end
 
 -- Crests and gear do change mid-raid, so a vote re-sends only when something the
@@ -126,17 +151,28 @@ end
 function wowauditGearProfile:OnResponseSent()
     local data = self:Build()
     if signatureFor(data) ~= lastSentSignature then
+        -- A vote is a quiet moment to push a real change without waiting out
+        -- the 5s throttle from the loot-ack send.
         self:Send(true)
     end
 end
 
 function wowauditGearProfile:SendOnRequest()
-    -- Spread replies so a full raid answering one request doesn't land in a single frame.
-    self:ScheduleTimer(function()
-        wowauditGearProfile:Send(true)
-    end, 0.5 + math.random() * 2)
+    self:ScheduleSend(true)
 end
 
 wowauditProfileForCharacter = function(name)
-    return name and sharedWowauditProfiles[name] or nil
+    if not name then
+        return nil
+    end
+    if sharedWowauditProfiles[name] then
+        return sharedWowauditProfiles[name]
+    end
+    -- Own profile is stored under whatever RCLootCouncil calls us; the loot
+    -- table key is not always that string, especially in /rc test.
+    if addon:UnitIsUnit(name, "player") then
+        local me = playerName()
+        return (me and sharedWowauditProfiles[me]) or profile
+    end
+    return nil
 end

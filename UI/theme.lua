@@ -330,7 +330,11 @@ function Theme:ShowItemTooltip(owner, link)
     end
 
     itemTooltip:SetOwner(owner, "ANCHOR_LEFT")
-    itemTooltip:SetHyperlink(link)
+    -- Malformed or half-cached links throw inside SetHyperlink.
+    if not pcall(itemTooltip.SetHyperlink, itemTooltip, link) then
+        itemTooltip:Hide()
+        return
+    end
     itemTooltip:Show()
 end
 

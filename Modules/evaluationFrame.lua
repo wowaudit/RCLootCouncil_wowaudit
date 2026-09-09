@@ -102,7 +102,7 @@ local function displayLootTable()
         return lootTable
     end
 
-    return addon:GetLootTable()
+    return addon:GetLootTable() or {}
 end
 
 local function settings()
@@ -254,6 +254,7 @@ function wowauditEvaluationFrame:OnInitialize()
 
     local function onNewLootTable()
         wishDifficultyOverride = nil
+        RCwowaudit:GetModule("wowauditShareData"):AllowProfileRequest()
         self:ScheduleRefresh()
     end
 
@@ -307,9 +308,7 @@ end
 -- Switching in the voting frame drives this window. Because the tab strip only
 -- ever calls SwitchSession and this handler only ever reads, there is no loop.
 function wowauditEvaluationFrame:OnSessionChanged()
-    if self.frame and self.frame:IsShown() then
-        self:Refresh()
-    end
+    self:ScheduleRefresh()
 end
 
 function wowauditEvaluationFrame:Toggle()
@@ -341,9 +340,21 @@ function wowauditEvaluationFrame:Show()
     frame:Raise()
     self:Refresh()
 
-    -- Backfill for anyone who opened the window late and missed the broadcast that
-    -- goes out with RCLootCouncil's loot ack.
-    RCwowaudit:GetModule("wowauditShareData"):RequestProfiles()
+    -- Backfill only when this client is missing profiles (opened late and missed
+    -- the loot-ack broadcast). Toggling the window is not another raid-wide request.
+    if self:HasMissingProfiles() then
+        RCwowaudit:GetModule("wowauditShareData"):RequestProfiles()
+    end
+end
+
+function wowauditEvaluationFrame:HasMissingProfiles()
+    local entry = displayLootTable()[currentSession()]
+    for name in pairs(entry and entry.candidates or {}) do
+        if not wowauditProfileForCharacter(name) then
+            return true
+        end
+    end
+    return false
 end
 
 function wowauditEvaluationFrame:Hide()
@@ -665,30 +676,25 @@ function wowauditEvaluationFrame:BuildList(f)
     thumb:SetScript("OnDragStart", function(self)
         self.dragOrigin = select(2, GetCursorPosition()) / UIParent:GetEffectiveScale()
         self.scrollOrigin = scroll:GetVerticalScroll()
-        self.dragging = true
+        self:SetScript("OnUpdate", function(thumb)
+            local range = math.max(0, child:GetHeight() - scroll:GetHeight())
+            if range == 0 then
+                return
+            end
+
+            local travel = track:GetHeight() - thumb:GetHeight()
+            if travel <= 0 then
+                return
+            end
+
+            local cursor = select(2, GetCursorPosition()) / UIParent:GetEffectiveScale()
+            local moved = (thumb.dragOrigin - cursor) / travel * range
+            scroll:SetVerticalScroll(math.min(range, math.max(0, thumb.scrollOrigin + moved)))
+            wowauditEvaluationFrame:UpdateScrollbar()
+        end)
     end)
     thumb:SetScript("OnDragStop", function(self)
-        self.dragging = false
-    end)
-    thumb:SetScript("OnUpdate", function(self)
-        if not self.dragging then
-            return
-        end
-
-        local range = math.max(0, child:GetHeight() - scroll:GetHeight())
-        if range == 0 then
-            return
-        end
-
-        local travel = track:GetHeight() - self:GetHeight()
-        if travel <= 0 then
-            return
-        end
-
-        local cursor = select(2, GetCursorPosition()) / UIParent:GetEffectiveScale()
-        local moved = (self.dragOrigin - cursor) / travel * range
-        scroll:SetVerticalScroll(math.min(range, math.max(0, self.scrollOrigin + moved)))
-        wowauditEvaluationFrame:UpdateScrollbar()
+        self:SetScript("OnUpdate", nil)
     end)
 
     f.scroll = scroll

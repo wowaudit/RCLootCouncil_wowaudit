@@ -1,0 +1,31 @@
+#!/bin/sh
+# Data/db.lua is tracked as an empty shell. The desktop client overwrites it when
+# this repo is used as the live addon. Never commit those synced values.
+
+file="Data/db.lua"
+
+if ! git diff --cached --name-only -- "$file" | grep -q .
+then
+  exit 0
+fi
+
+if git show ":$file" | grep -Eq '^wowauditTimestamp = [0-9]+|^teamID = [0-9]+|^wishlistData = \{[^}]'
+then
+  echo "warning: $file has desktop-synced values; committing the empty shell instead." >&2
+  if git cat-file -e "HEAD:$file" 2>/dev/null
+  then
+    git show "HEAD:$file"
+  else
+    cat <<'EOF'
+wowauditTimestamp = nil
+teamID = nil
+difficulties = {}
+wishlistData = {}
+bonusRollTargets = {}
+trinketPriorities = {}
+EOF
+  fi | git hash-object -w --stdin | {
+    read hash
+    git update-index --cacheinfo 100644,"$hash","$file"
+  }
+fi
