@@ -2,6 +2,7 @@ local addon = LibStub("AceAddon-3.0"):GetAddon("RCLootCouncil")
 local RCVotingFrame = addon:GetModule("RCVotingFrame")
 
 local RCwowaudit = addon:GetModule("RCwowaudit")
+local Theme = wowauditTheme
 local wowauditVotingFrame = RCwowaudit:NewModule("wowauditVotingFrame", "AceComm-3.0", "AceConsole-3.0", "AceHook-3.0",
     "AceEvent-3.0", "AceTimer-3.0", "AceSerializer-3.0")
 
@@ -46,7 +47,7 @@ function wowauditVotingFrame:SetCellWishlist(frame, data, cols, row, realrow, co
     local lootTable = addon:GetLootTable()
     local itemID = lootTable and lootTable[session] and lootTable[session].itemID
     local priority = trinketPriorityToDisplay(itemID, data[realrow].name)
-    local bonus = isBonusRollTarget(addon.lastEncounterID, data[realrow].name)
+    local bonus = wowauditBonusRollTargetForItem(itemID, data[realrow].name)
     local prefix = (priority and (priorityLabel(priority) .. " ") or "")
         .. (bonus and (diceIcon .. " ") or "")
 
@@ -105,11 +106,11 @@ function wowauditVotingFrame:SetCellWishlistNote(frame, data, cols, row, realrow
             f:SetSize(20, 20)
             f:SetPoint("CENTER", frame, "CENTER")
             f:SetNormalTexture("Interface/BUTTONS/UI-GuildButton-PublicNote-Up.png")
-            f:SetScript("OnEnter", function()
-                addon:CreateTooltip("Wishlist comment", text)
+            f:SetScript("OnEnter", function(self)
+                wowauditTheme:ShowTooltip(self, "Wishlist comment", text)
             end)
             f:SetScript("OnLeave", function()
-                addon:HideTooltip()
+                wowauditTheme:HideTooltip()
             end)
             data[realrow].cols[column].value = 1
         else
@@ -152,23 +153,87 @@ function wowauditVotingFrame:AddButtonToFrame()
     local f = RCVotingFrame:GetFrame()
     db = addon:Getdb()
 
+    -- OnEnable can fire more than once for the same frame; without this the buttons
+    -- stack on top of each other.
+    if f.valueDisplayButton then
+        return
+    end
+
     local text = wowauditValueDisplay == "VALUE" and " Show %" or " Show value"
     local valueDisplayButton = addon:CreateButton(logoIconSmall .. text, f.content)
     valueDisplayButton:SetSize(125, 25)
     valueDisplayButton:SetPoint("RIGHT", f.disenchant, "LEFT", -10, 0)
     valueDisplayButton:SetScript("OnClick", function(self)
-        if wowauditValueDisplay == "VALUE" then
-            wowauditValueDisplay = "PERCENTAGE"
-            valueDisplayButton:SetText(logoIconSmall .. " Show value")
-        else
-            wowauditValueDisplay = "VALUE"
-            valueDisplayButton:SetText(logoIconSmall .. " Show %")
-        end
+        RCwowaudit:SetValueDisplay(wowauditValueDisplay == "VALUE" and "PERCENTAGE" or "VALUE")
+        valueDisplayButton:SetText(logoIconSmall ..
+                                       (wowauditValueDisplay == "VALUE" and " Show %" or " Show value"))
 
         RCVotingFrame:Update()
+        RCwowaudit:RefreshEvaluationFrame()
     end)
 
     f.valueDisplayButton = valueDisplayButton
+
+    local evaluateButton = addon:CreateButton(logoIconSmall .. " Evaluate", f.content)
+    evaluateButton:SetSize(110, 25)
+    evaluateButton:SetPoint("RIGHT", valueDisplayButton, "LEFT", -10, 0)
+    evaluateButton:SetScript("OnClick", function()
+        RCwowaudit:GetModule("wowauditEvaluationFrame"):Toggle()
+    end)
+
+    f.wowauditEvaluateButton = evaluateButton
+
+    -- RCLootCouncil centres this over the button row, so the winner's name sat
+    -- behind Evaluate. Park both lines in the header gap to its left.
+    f.awardString:ClearAllPoints()
+    f.awardString:SetPoint("RIGHT", evaluateButton, "TOPLEFT", -12, 0)
+
+    -- Child of content so it hides with minimize; flush to the outer frame's
+    -- top-right so it reads as a tab, not a floating chip.
+    local tab = CreateFrame("Button", nil, f.content)
+    tab:SetHeight(30)
+    tab:SetPoint("BOTTOMRIGHT", f, "TOPRIGHT", 0, 0)
+
+    tab.bg = Theme:Solid(tab, "BACKGROUND")
+    tab.bg:SetAllPoints()
+    tab.bg:SetVertexColor(Theme:Color("header"))
+    Theme:Hairline(tab, "outline", 0)
+    Theme:Hairline(tab, "hairline", 1)
+
+    -- Don't use Theme:Icon here: its item-icon texcoords crop the circular logo
+    -- into a green square. Same raw texture the evaluation header uses.
+    tab.logo = tab:CreateTexture(nil, "ARTWORK")
+    tab.logo:SetTexture("Interface\\AddOns\\RCLootCouncil_wowaudit\\Media\\logo")
+    tab.logo:SetSize(18, 18)
+    tab.logo:SetPoint("LEFT", 10, 0)
+
+    tab.text = Theme:Value(tab, 14, true)
+    tab.text:SetPoint("LEFT", tab.logo, "RIGHT", 6, 0)
+    tab.text:SetText("Evaluate")
+
+    tab.arrow = tab:CreateTexture(nil, "ARTWORK")
+    tab.arrow:SetSize(14, 14)
+    tab.arrow:SetPoint("LEFT", tab.text, "RIGHT", 6, 0)
+    if C_Texture and C_Texture.GetAtlasInfo and C_Texture.GetAtlasInfo("common-icon-forwardarrow") then
+        tab.arrow:SetAtlas("common-icon-forwardarrow")
+    else
+        tab.arrow:SetTexture("Interface\\Buttons\\UI-SpellbookIcon-NextPage-Up")
+    end
+    tab.arrow:SetVertexColor(Theme:Color("value"))
+
+    tab:SetWidth(10 + 18 + 6 + tab.text:GetStringWidth() + 6 + 14 + 12)
+
+    tab:SetScript("OnEnter", function(self)
+        self.bg:SetVertexColor(0, 0, 0, 1)
+    end)
+    tab:SetScript("OnLeave", function(self)
+        self.bg:SetVertexColor(Theme:Color("header"))
+    end)
+    tab:SetScript("OnClick", function()
+        RCwowaudit:GetModule("wowauditEvaluationFrame"):Toggle()
+    end)
+
+    f.wowauditEvaluateTab = tab
 end
 
 function wowauditVotingFrame:UpdateSortNext()

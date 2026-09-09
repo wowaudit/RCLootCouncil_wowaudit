@@ -1,12 +1,7 @@
 sharedWowauditData = {}
+sharedWowauditProfiles = {}
 trinketPriorities = trinketPriorities or {}
 
-local itemContextDifficulties = {
-    ["3"] = "N",
-    ["4"] = "R",
-    ["5"] = "H",
-    ["6"] = "M"
-}
 local difficultyOrder = {"R", "N", "H", "M"}
 
 local presentDifficulties = {}
@@ -26,7 +21,7 @@ wowauditDataPresent = function()
     end
 end
 
-wowauditDataToDisplay = function(itemID, itemString, character)
+wowauditDataToDisplay = function(itemID, itemString, character, difficultyOverride)
     local wishes = {}
     local timestamp = nil
 
@@ -39,7 +34,7 @@ wowauditDataToDisplay = function(itemID, itemString, character)
     end
 
     if wowauditTimestamp ~= nil then
-        local ownWishes = wowauditDataForCharacter(itemID, itemString, character)
+        local ownWishes = wowauditDataForCharacter(itemID, itemString, character, difficultyOverride)
         if next(ownWishes) ~= nil then
             if wowauditSharingSetting == 'SELF' then
                 wishes = ownWishes
@@ -54,20 +49,16 @@ wowauditDataToDisplay = function(itemID, itemString, character)
     return wishes
 end
 
-wowauditDataForCharacter = function(itemID, itemString, character)
-    local difficulty = nil
-    for property in string.gmatch(itemString, "([^:]+)") do
-        if difficulties[property] then
-            difficulty = difficulties[property]
-        end
-    end
-
-    -- Items from the dungeon journal don't have bonus IDs, but they do have itemContext.
-    if not difficulty then
-        difficulty = itemContextDifficulties[getValueFromItemLink(itemString, 12)]
-    end
+wowauditDataForCharacter = function(itemID, itemString, character, difficultyOverride)
+    -- Difficulty resolution lives in Utils/gear.lua so the evaluation window and
+    -- this lookup can never disagree about which difficulty an item belongs to.
+    local itemDifficulty = wowauditDifficultyForItem(itemString)
+    local difficulty = difficultyOverride or itemDifficulty
 
     if difficulty then
+        -- Tag against what we asked for (override or the item itself), not the
+        -- native loot difficulty. Otherwise switching the evaluation header to
+        -- LFR still looks up Heroic and never marks the result as (H).
         return wowauditCharacterDataForDifficulty(itemID, character, difficulty, true, difficulty)
     else
         return {}
@@ -84,7 +75,7 @@ wowauditCharacterDataForDifficulty = function(itemId, character, difficulty, ini
                 local nextDifficulty = getNextDifficulty(difficulty)
                 if initial and nextDifficulty then
                     return wowauditCharacterDataForDifficulty(itemId, character, nextDifficulty,
-                        wowauditDifficultyMatch == "ANY", difficulty)
+                        wowauditDifficultyMatch == "ANY", originalDifficulty)
                 else
                     return {}
                 end
@@ -92,11 +83,19 @@ wowauditCharacterDataForDifficulty = function(itemId, character, difficulty, ini
         else
             for _, item in ipairs(wishlistData[character][difficulty]) do
                 if item.id == itemId then
-                    if originalDifficulty ~= difficulty then
-                        item.difficulty = difficulty
+                    -- Copy so LENIENT tags do not leak onto the synced table and
+                    -- then show up on later lookups for a different difficulty.
+                    local tagged = {}
+                    for k, v in pairs(item) do
+                        tagged[k] = v
+                    end
+                    if originalDifficulty and originalDifficulty ~= difficulty then
+                        tagged.difficulty = difficulty
+                    else
+                        tagged.difficulty = nil
                     end
 
-                    tinsert(wishes, item)
+                    tinsert(wishes, tagged)
                 end
             end
         end
@@ -156,7 +155,28 @@ transformWish = function(wish)
     wish.value = wish.v or wish.value
     wish.percent = wish.p or wish.percent
     wish.comment = wish.c or wish.comment
+    wish.bonus = wish.b or wish.bonus
     return wish
+end
+
+-- item:ID:...:numBonusIDs:bonus1:bonus2 (bonus IDs start at field 15; see Utils/gear.lua)
+wowauditWishItemLink = function(itemID, bonusString)
+    if not itemID then
+        return nil
+    end
+    if not bonusString or bonusString == "" then
+        return itemID
+    end
+
+    local ids = {}
+    for id in tostring(bonusString):gmatch("%d+") do
+        tinsert(ids, id)
+    end
+    if #ids == 0 then
+        return itemID
+    end
+
+    return "item:" .. itemID .. string.rep(":", 12) .. #ids .. ":" .. table.concat(ids, ":")
 end
 
 getNextDifficulty = function(currentDifficulty)
@@ -184,7 +204,11 @@ textColors = {
 }
 
 withColor = function(text, colorKey)
-    return "|cn" .. textColors[colorKey] .. ":" .. (text or "error") .. "|r"
+    local color = textColors[colorKey]
+    if not color then
+        return text or ""
+    end
+    return "|cn" .. color .. ":" .. (text or "error") .. "|r"
 end
 
 specToClassIcon = {

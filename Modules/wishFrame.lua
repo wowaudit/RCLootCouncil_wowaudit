@@ -95,7 +95,8 @@ function wowauditWishFrame:Show()
             for _, item in ipairs(items) do
                 item = transformWish(item)
                 local row = {}
-                local name, link, _, _, _, _, _, _, _ = C_Item.GetItemInfo(item.id)
+                local itemLink = wowauditWishItemLink(item.id, item.bonus)
+                local name, link, _, _, _, _, _, _, _ = C_Item.GetItemInfo(itemLink)
 
                 if not name then
                     uncachedItems[item.id] = true
@@ -245,11 +246,11 @@ function wowauditWishFrame:SetWishNote(frame, data, cols, row, realrow, column, 
         f:SetSize(20, 20)
         f:SetPoint("CENTER", frame, "CENTER")
         f:SetNormalTexture("Interface/BUTTONS/UI-GuildButton-PublicNote-Up.png")
-        f:SetScript("OnEnter", function()
-            addon:CreateTooltip("Wish comment", note)
+        f:SetScript("OnEnter", function(self)
+            wowauditTheme:ShowTooltip(self, "Wish comment", note)
         end)
         f:SetScript("OnLeave", function()
-            addon:HideTooltip()
+            wowauditTheme:HideTooltip()
         end)
         frame.noteBtn = f
         f:Show()

@@ -3,7 +3,7 @@
 ## Description: Display wowaudit wishlist information in the RCLootCouncil roll and voting frames, and enable loot history statistics on wowaudit
 ## Notes: Display wowaudit wishlist information in the RCLootCouncil roll and voting frames, and enable loot history statistics on wowaudit
 ## Author: Emiel van Lankveld
-## Version: 1.0.21
+## Version: 1.1.0
 ## Dependencies: RCLootCouncil
 ## IconTexture: Interface\AddOns\RCLootCouncil_wowaudit\Media\logo
 
@@ -13,13 +13,22 @@
 core.lua
 
 Data\db.lua
+Data\tracks.lua
+Data\encounters.lua
 
 Utils\helpers.lua
+Utils\gear.lua
 Utils\popups.lua
 
+UI\theme.lua
+UI\evaluationRow.lua
+
+Modules\gearProfile.lua
 Modules\shareData.lua
 Modules\bonusRoll.lua
+Modules\bonusLoot.lua
 Modules\votingFrame.lua
 Modules\lootFrame.lua
 Modules\lootHistory.lua
 Modules\wishFrame.lua
+Modules\evaluationFrame.lua
