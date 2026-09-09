@@ -2,7 +2,7 @@ local addon = LibStub("AceAddon-3.0"):GetAddon("RCLootCouncil")
 local RCwowaudit = addon:GetModule("RCwowaudit")
 local wowauditBonusRoll = RCwowaudit:NewModule("wowauditBonusRoll", "AceComm-3.0", "AceSerializer-3.0")
 
-local CURRENCY_ID = 3418
+local CURRENCY_ID = wowauditBonusRollCurrencyID
 local COMM_PREFIX = "WowauditCoins"
 
 local function normalizeRealm(realm)
@@ -25,6 +25,15 @@ end
 local function playerFullName()
     local name, realm = UnitFullName("player")
     return fullName(name, realm)
+end
+
+local function collectLocalCrests()
+    local left = {}
+    for _, currencyID in pairs(wowauditCrestCurrencies) do
+        local info = C_CurrencyInfo.GetCurrencyInfo(currencyID)
+        left[tostring(currencyID)] = (info and info.quantity) or 0
+    end
+    return left
 end
 
 function wowauditBonusRoll:OnInitialize()
@@ -58,13 +67,16 @@ function wowauditBonusRoll:OnCommReceived(_, msg, _, sender)
     end
 
     local _, _, classId = UnitClass("player")
+    local now = time()
     self:SendCommMessage(COMM_PREFIX, self:Serialize({
         cmd = "RESP",
         currencyId = CURRENCY_ID,
         left = info.quantity or 0,
         earned = info.totalEarned or 0,
         cap = info.maxQuantity or 0,
-        updatedAt = time(),
+        updatedAt = now,
         classId = classId,
+        crests = collectLocalCrests(),
+        crestsUpdatedAt = now,
     }), "WHISPER", sender)
 end

@@ -1,6 +1,7 @@
 local addon = LibStub("AceAddon-3.0"):GetAddon("RCLootCouncil")
 local Comms = addon.Require "Services.Comms"
 local ItemUtils = addon.Require "Utils.Item"
+local Player = addon.Require "Data.Player"
 
 local RCwowaudit = addon:GetModule("RCwowaudit")
 local wowauditShareData = RCwowaudit:NewModule("wowauditShareData", "AceComm-3.0", "AceConsole-3.0", "AceHook-3.0",
@@ -9,6 +10,11 @@ local wowauditShareData = RCwowaudit:NewModule("wowauditShareData", "AceComm-3.0
 RCwowaudit.PREFIXES = {
     MAIN = "RCau"
 }
+
+-- Comms:Subscribe asserts that the prefix is one RCLootCouncil knows about, so ours
+-- is registered at load time: any module subscribing during initialisation is then
+-- safe regardless of the order they initialise in.
+addon.PREFIXES.WOWAUDIT = RCwowaudit.PREFIXES.MAIN
 
 function wowauditShareData:OnInitialize()
     RCwowaudit.Send = Comms:GetSender(RCwowaudit.PREFIXES.MAIN)
@@ -21,6 +27,12 @@ function wowauditShareData:OnInitialize()
         end,
         request_wishlist_data = function(data, sender)
             self:OnWishlistDataRequested(unpack(data))
+        end,
+        profile = function(data, sender)
+            self:OnProfileReceived(sender, unpack(data))
+        end,
+        request_profile = function(data, sender)
+            RCwowaudit:GetModule("wowauditGearProfile"):SendOnRequest()
         end
     })
 end
@@ -73,4 +85,26 @@ end
 
 function wowauditShareData:OnWishlistDataRequested(itemID, itemString)
     self:SendWishlistData(itemID, itemString, false)
+end
+
+-- Keyed the same way RCLootCouncil keys its candidates, so a row can look up the
+-- sender's profile without any name juggling. The payload comes from another
+-- player's client, so it is normalised rather than trusted.
+function wowauditShareData:OnProfileReceived(sender, data)
+    if type(data) ~= "table" or not sender then
+        return
+    end
+
+    local player = Player:Get(sender)
+    local name = player and player.name or sender
+
+    data.cr = type(data.cr) == "table" and data.cr or {}
+    data.eq = type(data.eq) == "table" and data.eq or {}
+    sharedWowauditProfiles[name] = data
+end
+
+function wowauditShareData:RequestProfiles()
+    if IsInGroup() then
+        RCwowaudit:Send("group", "request_profile")
+    end
 end

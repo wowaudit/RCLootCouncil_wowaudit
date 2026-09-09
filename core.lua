@@ -8,6 +8,34 @@ wowauditValueDisplay = 'VALUE'
 wowauditDifficultyMatch = 'LENIENT'
 wowauditSharingSetting = 'NEWEST'
 
+-- Response filter for the evaluation window. Keyed exactly like RCLootCouncil's own
+-- voting frame filters: response indices plus the PASS, AUTOPASS and STATUS groups.
+local function evaluationFilters()
+    local db = addon:Getdb()
+    db.wowauditEvaluationFilters = db.wowauditEvaluationFilters or {}
+    return db.wowauditEvaluationFilters
+end
+
+local function responseFilterValues()
+    local values = {}
+
+    -- String keys only: Blizzard's settings UI sorts these with `<`, which errors
+    -- if response indices (numbers) are mixed with PASS/AUTOPASS/STATUS.
+    for index = 1, addon:GetNumButtons() do
+        values[tostring(index)] = addon:GetResponse("default", index).text or ("Response " .. index)
+    end
+
+    values.PASS = addon:GetResponse("default", "PASS").text or "Pass"
+    values.AUTOPASS = addon:GetResponse("default", "AUTOPASS").text or "Autopass"
+    values.STATUS = "Status texts"
+
+    return values
+end
+
+local function coerceFilterKey(key)
+    return tonumber(key) or key
+end
+
 local optionsTable = {
     type = "group",
     name = "RCLootCouncil",
@@ -43,6 +71,10 @@ local optionsTable = {
                                 db = addon:Getdb()
                                 db.wowauditDifficultyMatch = value
                                 wowauditDifficultyMatch = value
+                                -- Which difficulty a character's wishes come from
+                                -- feeds the cached slot grouping.
+                                wowauditInvalidateSlotWishes()
+                                RCwowaudit:RefreshEvaluationFrame()
                             end
                         },
                         SetSharingSetting = {
@@ -84,9 +116,53 @@ local optionsTable = {
                                 return wowauditValueDisplay
                             end,
                             set = function(info, value)
-                                db = addon:Getdb()
-                                db.wowauditValueDisplay = value
-                                wowauditValueDisplay = value
+                                RCwowaudit:SetValueDisplay(value)
+                            end
+                        },
+                        SetEvaluationSort = {
+                            type = "select",
+                            order = 2,
+                            name = "Evaluation window sorting",
+                            desc = "Choose how the rows in the evaluation window are ordered by default.",
+                            values = {
+                                value = "Wish value",
+                                response = "Response",
+                                ilvl = "Item level",
+                                name = "Name"
+                            },
+                            get = function(info)
+                                return addon:Getdb().wowauditEvaluationSort or "value"
+                            end,
+                            set = function(info, value)
+                                addon:Getdb().wowauditEvaluationSort = value
+                                RCwowaudit:RefreshEvaluationFrame()
+                            end
+                        }
+                    }
+                },
+                EvaluationSettings = {
+                    type = "group",
+                    inline = true,
+                    name = "Evaluation window",
+                    width = "full",
+                    args = {
+                        SetEvaluationResponses = {
+                            type = "multiselect",
+                            order = 1,
+                            name = "Responses to display",
+                            desc = "Choose which responses show up as rows in the evaluation window. The same setting is available in the window's own header.",
+                            values = responseFilterValues,
+                            get = function(info, key)
+                                local filters = evaluationFilters()
+                                key = coerceFilterKey(key)
+                                if type(key) == "number" then
+                                    return filters[key] ~= false
+                                end
+                                return filters[key] == true
+                            end,
+                            set = function(info, key, value)
+                                evaluationFilters()[coerceFilterKey(key)] = value
+                                RCwowaudit:RefreshEvaluationFrame()
                             end
                         }
                     }
@@ -119,12 +195,32 @@ function RCwowaudit:OnInitialize()
     -- Register all "/rc" subcommands from this single module so they share one help header.
     addon:ModuleChatCmd(self, "ShowWishes", nil, "Show synchronised wishlist data from wowaudit", "wishes", "wowaudit",
         "wishlists")
+    addon:ModuleChatCmd(self, "ShowEvaluation", "evaluate", "Open the loot evaluation window for the current session",
+        "evaluate", "evaluation")
     addon:ModuleChatCmd(self, "ShowBonusRolls", "bonusrolls", "Display available and earned bonus rolls for your raid group and guild (alt. 'coins')",
         "bonusrolls", "coins")
 end
 
 function RCwowaudit:ShowWishes()
     self:GetModule("wowauditWishFrame"):Show()
+end
+
+function RCwowaudit:ShowEvaluation()
+    self:GetModule("wowauditEvaluationFrame"):Toggle()
+end
+
+-- Shared by the options panel and the toggle buttons in both frames, so the setting
+-- survives a reload no matter where it was changed.
+function RCwowaudit:SetValueDisplay(value)
+    addon:Getdb().wowauditValueDisplay = value
+    wowauditValueDisplay = value
+end
+
+function RCwowaudit:RefreshEvaluationFrame()
+    local module = self:GetModule("wowauditEvaluationFrame", true)
+    if module then
+        module:Refresh()
+    end
 end
 
 -- The bonus roll window lives in the Wowaudit Companion addon.

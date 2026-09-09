@@ -46,7 +46,7 @@ function wowauditVotingFrame:SetCellWishlist(frame, data, cols, row, realrow, co
     local lootTable = addon:GetLootTable()
     local itemID = lootTable and lootTable[session] and lootTable[session].itemID
     local priority = trinketPriorityToDisplay(itemID, data[realrow].name)
-    local bonus = isBonusRollTarget(addon.lastEncounterID, data[realrow].name)
+    local bonus = wowauditBonusRollTargetForItem(itemID, data[realrow].name)
     local prefix = (priority and (priorityLabel(priority) .. " ") or "")
         .. (bonus and (diceIcon .. " ") or "")
 
@@ -105,11 +105,11 @@ function wowauditVotingFrame:SetCellWishlistNote(frame, data, cols, row, realrow
             f:SetSize(20, 20)
             f:SetPoint("CENTER", frame, "CENTER")
             f:SetNormalTexture("Interface/BUTTONS/UI-GuildButton-PublicNote-Up.png")
-            f:SetScript("OnEnter", function()
-                addon:CreateTooltip("Wishlist comment", text)
+            f:SetScript("OnEnter", function(self)
+                wowauditTheme:ShowTooltip(self, "Wishlist comment", text)
             end)
             f:SetScript("OnLeave", function()
-                addon:HideTooltip()
+                wowauditTheme:HideTooltip()
             end)
             data[realrow].cols[column].value = 1
         else
@@ -152,23 +152,37 @@ function wowauditVotingFrame:AddButtonToFrame()
     local f = RCVotingFrame:GetFrame()
     db = addon:Getdb()
 
+    -- OnEnable can fire more than once for the same frame; without this the buttons
+    -- stack on top of each other.
+    if f.valueDisplayButton then
+        return
+    end
+
     local text = wowauditValueDisplay == "VALUE" and " Show %" or " Show value"
     local valueDisplayButton = addon:CreateButton(logoIconSmall .. text, f.content)
     valueDisplayButton:SetSize(125, 25)
     valueDisplayButton:SetPoint("RIGHT", f.disenchant, "LEFT", -10, 0)
     valueDisplayButton:SetScript("OnClick", function(self)
-        if wowauditValueDisplay == "VALUE" then
-            wowauditValueDisplay = "PERCENTAGE"
-            valueDisplayButton:SetText(logoIconSmall .. " Show value")
-        else
-            wowauditValueDisplay = "VALUE"
-            valueDisplayButton:SetText(logoIconSmall .. " Show %")
-        end
+        RCwowaudit:SetValueDisplay(wowauditValueDisplay == "VALUE" and "PERCENTAGE" or "VALUE")
+        valueDisplayButton:SetText(logoIconSmall ..
+                                       (wowauditValueDisplay == "VALUE" and " Show %" or " Show value"))
 
         RCVotingFrame:Update()
+        RCwowaudit:RefreshEvaluationFrame()
     end)
 
     f.valueDisplayButton = valueDisplayButton
+
+    -- Same row as Disenchant/Filter/Abort, but twice as tall. Bottom-aligned so it
+    -- grows into the empty header band (item-icon height) instead of down into the table.
+    local evaluateButton = addon:CreateButton(logoIconSmall .. " Evaluate", f.content)
+    evaluateButton:SetSize(110, 50)
+    evaluateButton:SetPoint("BOTTOMRIGHT", valueDisplayButton, "BOTTOMLEFT", -10, 0)
+    evaluateButton:SetScript("OnClick", function()
+        RCwowaudit:GetModule("wowauditEvaluationFrame"):Toggle()
+    end)
+
+    f.wowauditEvaluateButton = evaluateButton
 end
 
 function wowauditVotingFrame:UpdateSortNext()
