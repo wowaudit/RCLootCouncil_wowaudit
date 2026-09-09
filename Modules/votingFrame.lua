@@ -2,6 +2,7 @@ local addon = LibStub("AceAddon-3.0"):GetAddon("RCLootCouncil")
 local RCVotingFrame = addon:GetModule("RCVotingFrame")
 
 local RCwowaudit = addon:GetModule("RCwowaudit")
+local Theme = wowauditTheme
 local wowauditVotingFrame = RCwowaudit:NewModule("wowauditVotingFrame", "AceComm-3.0", "AceConsole-3.0", "AceHook-3.0",
     "AceEvent-3.0", "AceTimer-3.0", "AceSerializer-3.0")
 
@@ -173,16 +174,66 @@ function wowauditVotingFrame:AddButtonToFrame()
 
     f.valueDisplayButton = valueDisplayButton
 
-    -- Same row as Disenchant/Filter/Abort, but twice as tall. Bottom-aligned so it
-    -- grows into the empty header band (item-icon height) instead of down into the table.
     local evaluateButton = addon:CreateButton(logoIconSmall .. " Evaluate", f.content)
-    evaluateButton:SetSize(110, 50)
-    evaluateButton:SetPoint("BOTTOMRIGHT", valueDisplayButton, "BOTTOMLEFT", -10, 0)
+    evaluateButton:SetSize(110, 25)
+    evaluateButton:SetPoint("RIGHT", valueDisplayButton, "LEFT", -10, 0)
     evaluateButton:SetScript("OnClick", function()
         RCwowaudit:GetModule("wowauditEvaluationFrame"):Toggle()
     end)
 
     f.wowauditEvaluateButton = evaluateButton
+
+    -- RCLootCouncil centres this over the button row, so the winner's name sat
+    -- behind Evaluate. Park both lines in the header gap to its left.
+    f.awardString:ClearAllPoints()
+    f.awardString:SetPoint("RIGHT", evaluateButton, "TOPLEFT", -12, 0)
+
+    -- Child of content so it hides with minimize; flush to the outer frame's
+    -- top-right so it reads as a tab, not a floating chip.
+    local tab = CreateFrame("Button", nil, f.content)
+    tab:SetHeight(30)
+    tab:SetPoint("BOTTOMRIGHT", f, "TOPRIGHT", 0, 0)
+
+    tab.bg = Theme:Solid(tab, "BACKGROUND")
+    tab.bg:SetAllPoints()
+    tab.bg:SetVertexColor(Theme:Color("header"))
+    Theme:Hairline(tab, "outline", 0)
+    Theme:Hairline(tab, "hairline", 1)
+
+    -- Don't use Theme:Icon here: its item-icon texcoords crop the circular logo
+    -- into a green square. Same raw texture the evaluation header uses.
+    tab.logo = tab:CreateTexture(nil, "ARTWORK")
+    tab.logo:SetTexture("Interface\\AddOns\\RCLootCouncil_wowaudit\\Media\\logo")
+    tab.logo:SetSize(18, 18)
+    tab.logo:SetPoint("LEFT", 10, 0)
+
+    tab.text = Theme:Value(tab, 14, true)
+    tab.text:SetPoint("LEFT", tab.logo, "RIGHT", 6, 0)
+    tab.text:SetText("Evaluate")
+
+    tab.arrow = tab:CreateTexture(nil, "ARTWORK")
+    tab.arrow:SetSize(14, 14)
+    tab.arrow:SetPoint("LEFT", tab.text, "RIGHT", 6, 0)
+    if C_Texture and C_Texture.GetAtlasInfo and C_Texture.GetAtlasInfo("common-icon-forwardarrow") then
+        tab.arrow:SetAtlas("common-icon-forwardarrow")
+    else
+        tab.arrow:SetTexture("Interface\\Buttons\\UI-SpellbookIcon-NextPage-Up")
+    end
+    tab.arrow:SetVertexColor(Theme:Color("value"))
+
+    tab:SetWidth(10 + 18 + 6 + tab.text:GetStringWidth() + 6 + 14 + 12)
+
+    tab:SetScript("OnEnter", function(self)
+        self.bg:SetVertexColor(0, 0, 0, 1)
+    end)
+    tab:SetScript("OnLeave", function(self)
+        self.bg:SetVertexColor(Theme:Color("header"))
+    end)
+    tab:SetScript("OnClick", function()
+        RCwowaudit:GetModule("wowauditEvaluationFrame"):Toggle()
+    end)
+
+    f.wowauditEvaluateTab = tab
 end
 
 function wowauditVotingFrame:UpdateSortNext()
