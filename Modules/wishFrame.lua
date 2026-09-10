@@ -6,6 +6,7 @@ local wowauditWishFrame = RCwowaudit:NewModule("wowauditWishFrame", "AceComm-3.0
     "AceEvent-3.0", "AceTimer-3.0", "AceSerializer-3.0", "AceBucket-3.0")
 
 local ROW_HEIGHT = 20
+local SHARE_STATUS_HEIGHT = 16
 
 local DIFFICULTIES = {
     N = "Normal",
@@ -182,11 +183,12 @@ function wowauditWishFrame:Show()
         self.frame.infoText:SetText(withColor(
             "No wishlist data found. Ensure that the desktop client is installed and running.", "o"))
     else
-        self.frame.infoText:SetText(wishesFound .. " wishes found, from " .. charactersFound ..
-                                        " characters. Last updated " .. date("%B %d, %H:%M", wowauditTimestamp), "b")
+        self.frame.infoText:SetText(wishesFound .. " wishes, " .. charactersFound .. " characters. Updated " ..
+                                        date("%b %d, %H:%M", wowauditTimestamp))
     end
 
     self.frame.st:SetData(rows, true)
+    self:UpdateShareStatus()
     self.frame:Show()
 end
 
@@ -205,7 +207,7 @@ function wowauditWishFrame:GetFrame()
     local st = ST:CreateST(self.scrollCols, 25, ROW_HEIGHT, nil, f.content)
     st.frame:SetPoint("TOPLEFT", f, "TOPLEFT", 10, -35)
     f:SetWidth(st.frame:GetWidth() + 20)
-    f:SetHeight(585)
+    f:SetHeight(wowauditIsSource and 605 or 585)
     f.st = st
 
     local closeButton = addon:CreateButton("Close", f.content)
@@ -215,22 +217,111 @@ function wowauditWishFrame:GetFrame()
     end)
     f.closeButton = closeButton
 
+    local broadcastButton = addon:CreateButton("Share data", f.content)
+    broadcastButton:SetPoint("RIGHT", closeButton, "LEFT", -10, 0)
+    broadcastButton:SetScript("OnClick", function()
+        RCwowaudit:GetModule("wowauditShareData"):BroadcastNow()
+    end)
+    f.broadcastButton = broadcastButton
+
     local infoText = f.content:CreateFontString(nil, "OVERLAY", "GameFontNormal")
     infoText:SetPoint("BOTTOMLEFT", f, "BOTTOMLEFT", 15, 15)
     infoText:SetTextColor(1, 1, 1, 1)
     f.infoText = infoText
 
+    local strip = CreateFrame("Frame", nil, f.content)
+    strip:SetHeight(SHARE_STATUS_HEIGHT)
+    strip:SetPoint("BOTTOMLEFT", f, "BOTTOMLEFT", 10, 36)
+    strip:SetPoint("BOTTOMRIGHT", f, "BOTTOMRIGHT", -10, 36)
+
+    local bar = CreateFrame("StatusBar", nil, strip)
+    bar:SetAllPoints()
+    bar:SetStatusBarTexture("ui-castingbar-filling-standard")
+    bar:SetStatusBarColor(1, 1, 1)
+    bar:SetMinMaxValues(0, 1)
+    bar:SetValue(0)
+
+    local background = bar:CreateTexture(nil, "BACKGROUND")
+    background:SetAllPoints()
+    background:SetAtlas("ui-castingbar-background")
+
+    local spark = bar:CreateTexture(nil, "OVERLAY")
+    spark:SetAtlas("ui-castingbar-pip")
+    spark:SetBlendMode("ADD")
+    spark:Hide()
+    bar.Spark = spark
+
+    -- Child of the StatusBar, same as Blizzard's cast bar, so the fill stays behind.
+    local label = bar:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
+    label:SetPoint("CENTER")
+    label:SetJustifyH("CENTER")
+
+    bar:SetScript("OnValueChanged", function(self, value)
+        local sparkTex = self.Spark
+        local minValue, maxValue = self:GetMinMaxValues()
+        if not sparkTex or maxValue <= minValue or value <= minValue then
+            sparkTex:Hide()
+            return
+        end
+        sparkTex:Show()
+        sparkTex:ClearAllPoints()
+        sparkTex:SetPoint("CENTER", self, "LEFT", self:GetWidth() * ((value - minValue) / (maxValue - minValue)), 0)
+    end)
+
+    f.shareStatus = strip
+    strip.bar = bar
+    strip.label = label
+
     return f
+end
+
+function wowauditWishFrame:UpdateShareStatus()
+    local f = self.frame
+    if not f or not f.shareStatus then
+        return
+    end
+
+    local share = RCwowaudit:GetModule("wowauditShareData", true)
+    local view = share and share:ShareStatusView()
+    if f.broadcastButton then
+        if view then
+            f.broadcastButton:Show()
+            if view.inProgress then
+                f.broadcastButton:Disable()
+            else
+                f.broadcastButton:Enable()
+            end
+        else
+            f.broadcastButton:Hide()
+        end
+    end
+    if not view then
+        f.shareStatus:Hide()
+        return
+    end
+
+    f.shareStatus:Show()
+    local bar, label = f.shareStatus.bar, f.shareStatus.label
+    if view.inProgress then
+        bar:SetMinMaxValues(0, view.total)
+        bar:SetValue(view.sent)
+        label:SetText(view.text)
+        return
+    end
+
+    bar:SetMinMaxValues(0, 1)
+    bar:SetValue(0)
+    label:SetText(view.text)
 end
 
 function wowauditWishFrame:SetItemLink(frame, data, cols, row, realrow, column, fShow, table, ...)
     local itemLink = data[realrow][column].value
 
-    frame:SetScript("OnEnter", function()
-        addon:CreateHypertip(itemLink)
+    frame:SetScript("OnEnter", function(self)
+        wowauditTheme:ShowItemTooltip(self, itemLink)
     end)
     frame:SetScript("OnLeave", function()
-        addon:HideTooltip()
+        wowauditTheme:HideItemTooltip()
     end)
 
     frame.text:SetText(itemLink)

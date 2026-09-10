@@ -20,7 +20,6 @@ addon.PREFIXES.WOWAUDIT = RCwowaudit.PREFIXES.MAIN
 wowauditIsSource = wowauditTimestamp ~= nil
 
 local GROUP_SYNC_DELAY = 2
-local PUSH_LISTEN_DELAY = 3
 local REQUEST_THROTTLE = 10
 local REPLY_JITTER_MIN = 0.3
 local REPLY_JITTER_MAX = 1.8
@@ -30,6 +29,81 @@ local wasInGroup = false
 local lastRequestAt = 0
 local pushedTimestamp
 local suppressPush = false
+local broadcast = {
+    inProgress = false,
+    sent = 0,
+    total = 0,
+    lastCompletedAt = nil,
+    lastDuration = nil
+}
+
+local function persistBroadcast()
+    local db = addon:Getdb()
+    db.wowauditLastShareAt = broadcast.lastCompletedAt
+    db.wowauditLastShareDuration = broadcast.lastDuration
+end
+
+local function notifyShareUI()
+    local wishes = RCwowaudit:GetModule("wowauditWishFrame", true)
+    if wishes and wishes.UpdateShareStatus then
+        wishes:UpdateShareStatus()
+    end
+end
+
+local function onSendProgress(_, sent, total)
+    broadcast.sent = sent or 0
+    broadcast.total = total or 0
+    broadcast.inProgress = broadcast.sent < broadcast.total
+    if not broadcast.inProgress then
+        broadcast.lastCompletedAt = time()
+        if broadcast.startedAt then
+            broadcast.lastDuration = GetTime() - broadcast.startedAt
+        end
+        broadcast.startedAt = nil
+        persistBroadcast()
+    end
+    notifyShareUI()
+end
+
+function wowauditShareData:GetBroadcastStatus()
+    return broadcast
+end
+
+function wowauditShareData:ShareStatusView()
+    if not wowauditIsSource then
+        return nil
+    end
+    if broadcast.inProgress then
+        local total = broadcast.total or 0
+        local sent = broadcast.sent or 0
+        local text = "Sharing wishlists with group…"
+        if total > 0 then
+            text = format("Sharing wishlists with group… %d%%  %.1f / %.1f KB", math.floor(sent / total * 100), sent / 1024,
+                total / 1024)
+        end
+        return {
+            inProgress = true,
+            text = text,
+            sent = sent,
+            total = math.max(total, 1)
+        }
+    end
+    if broadcast.lastCompletedAt then
+        local took = broadcast.lastDuration and format(" (took %ds)", math.floor(broadcast.lastDuration + 0.5)) or ""
+        return {
+            inProgress = false,
+            text = "Last shared " .. date("%H:%M", broadcast.lastCompletedAt) .. took,
+            sent = 0,
+            total = 1
+        }
+    end
+    return {
+        inProgress = false,
+        text = "Not shared this session",
+        sent = 0,
+        total = 1
+    }
+end
 
 local function teamKey(id)
     return tostring(id or 0)
@@ -98,6 +172,10 @@ local function applyDataset(payload, fromCache)
     end
 
     RCwowaudit:RefreshEvaluationFrame()
+    local wishes = RCwowaudit:GetModule("wowauditWishFrame", true)
+    if wishes and wishes.frame and wishes.frame:IsShown() then
+        wishes:Show()
+    end
     return true
 end
 
@@ -142,45 +220,63 @@ local function sendFullData()
     end
 
     pushedTimestamp = wowauditTimestamp
-    RCwowaudit:Send("group", "full_data", currentPayload())
+    broadcast.inProgress = true
+    broadcast.sent = 0
+    broadcast.total = 0
+    broadcast.startedAt = GetTime()
+    notifyShareUI()
+
+    Comms:Send({
+        prefix = RCwowaudit.PREFIXES.MAIN,
+        target = "group",
+        command = "full_data",
+        data = {currentPayload()},
+        callback = onSendProgress
+    })
+end
+
+function wowauditShareData:BroadcastNow()
+    if not wowauditIsSource or not wowauditTimestamp then
+        return
+    end
+    if not IsInGroup() then
+        addon:Print("Join a group to broadcast wishlist data.")
+        return
+    end
+    if broadcast.inProgress then
+        return
+    end
+
+    suppressPush = false
+    self:CancelPendingSend()
+    sendFullData()
 end
 
 function wowauditShareData:CancelPendingSend()
-    if self.pushTimer then
-        self:CancelTimer(self.pushTimer)
-        self.pushTimer = nil
-    end
     if self.replyTimer then
         self:CancelTimer(self.replyTimer)
         self.replyTimer = nil
     end
 end
 
-function wowauditShareData:SchedulePush()
-    if self.pushTimer then
+function wowauditShareData:AnnounceVersion()
+    if not wowauditIsSource or not wowauditTimestamp or not IsInGroup() then
         return
     end
-
-    self.pushTimer = self:ScheduleTimer(function()
-        wowauditShareData.pushTimer = nil
-        if suppressPush then
-            return
-        end
-        if not wowauditIsSource or not wowauditTimestamp then
-            return
-        end
-        sendFullData()
-    end, PUSH_LISTEN_DELAY)
+    RCwowaudit:Send("group", "data_version", wowauditTimestamp, teamID or 0)
 end
 
 function wowauditShareData:ScheduleReply()
-    if self.replyTimer or self.pushTimer then
+    if self.replyTimer then
         return
     end
 
     local delay = REPLY_JITTER_MIN + math.random() * (REPLY_JITTER_MAX - REPLY_JITTER_MIN)
     self.replyTimer = self:ScheduleTimer(function()
         wowauditShareData.replyTimer = nil
+        if suppressPush then
+            return
+        end
         sendFullData()
     end, delay)
 end
@@ -209,11 +305,23 @@ function wowauditShareData:ScheduleGroupSync()
         end
 
         suppressPush = false
-        wowauditShareData:RequestDataset()
+        -- Sources advertise a timestamp only. The full payload is sent later, and
+        -- only if someone answers that theirs is older.
         if wowauditIsSource then
-            wowauditShareData:SchedulePush()
+            wowauditShareData:AnnounceVersion()
         end
+        wowauditShareData:RequestDataset()
     end, GROUP_SYNC_DELAY)
+end
+
+function wowauditShareData:IsStaleVs(theirTimestamp, theirTeam)
+    if not theirTimestamp then
+        return false
+    end
+    if teamKey(theirTeam) ~= teamKey(teamID) then
+        return true
+    end
+    return not wowauditTimestamp or theirTimestamp > wowauditTimestamp
 end
 
 function wowauditShareData:ShouldReply(theirTimestamp, theirTeam)
@@ -224,6 +332,16 @@ function wowauditShareData:ShouldReply(theirTimestamp, theirTeam)
         return true
     end
     return wowauditTimestamp > (theirTimestamp or 0)
+end
+
+function wowauditShareData:OnDataVersionReceived(sender, theirTimestamp, theirTeam)
+    if isSelf(sender) then
+        return
+    end
+    if not self:IsStaleVs(theirTimestamp, theirTeam) then
+        return
+    end
+    self:RequestDataset()
 end
 
 function wowauditShareData:OnRequestDataReceived(sender, theirTimestamp, theirTeam)
@@ -280,6 +398,9 @@ function wowauditShareData:OnInitialize()
     -- grouping fires. Own db.lua is only written to the cache if it is fresher.
     local ok = pcall(function()
         hydrateFromCache()
+        local db = addon:Getdb()
+        broadcast.lastCompletedAt = db.wowauditLastShareAt
+        broadcast.lastDuration = db.wowauditLastShareDuration
         if wowauditIsSource and wowauditTimestamp then
             local cached = datasetStore().wowauditSharedDataset[teamKey(teamID)]
             if not cached or (cached.timestamp or 0) < wowauditTimestamp then
@@ -298,6 +419,9 @@ function wowauditShareData:OnInitialize()
     self:RegisterEvent("GROUP_ROSTER_UPDATE")
 
     Comms:BulkSubscribe(RCwowaudit.PREFIXES.MAIN, {
+        data_version = function(data, sender)
+            self:OnDataVersionReceived(sender, unpack(data))
+        end,
         request_data = function(data, sender)
             self:OnRequestDataReceived(sender, unpack(data))
         end,
