@@ -271,7 +271,7 @@ function wowauditEvaluationFrame:OnInitialize()
     })
 
     self.wowauditSubscriptions = Comms:BulkSubscribe(RCwowaudit.PREFIXES.MAIN, {
-        wishlist_data = refresh,
+        full_data = refresh,
         profile = refresh
     })
 end
@@ -342,9 +342,12 @@ function wowauditEvaluationFrame:Show()
 
     -- Backfill only when this client is missing profiles (opened late and missed
     -- the loot-ack broadcast). Toggling the window is not another raid-wide request.
+    local share = RCwowaudit:GetModule("wowauditShareData")
     if self:HasMissingProfiles() then
-        RCwowaudit:GetModule("wowauditShareData"):RequestProfiles()
+        share:RequestProfiles()
     end
+    -- Freshness check: a source with newer data replies; already-current is a no-op.
+    share:RequestDataset()
 end
 
 function wowauditEvaluationFrame:HasMissingProfiles()
@@ -1052,9 +1055,13 @@ function wowauditEvaluationFrame:RefreshFooter(profilesFound, total)
     local footer = self.frame.footer
 
     if wowauditTimestamp then
-        footer.left:SetText("Wishlists synced " .. date("%B %d, %H:%M", wowauditTimestamp))
-    elseif next(sharedWowauditData) ~= nil then
-        footer.left:SetText("Using wishlist data shared by your raid")
+        local ageDays = wowauditWishlistAgeWarning and wowauditWishlistAgeWarning()
+        local synced = "Wishlists synced " .. date("%B %d, %H:%M", wowauditTimestamp)
+        if ageDays then
+            footer.left:SetText(withColor(synced .. " (" .. ageDays .. " days old)", "o"))
+        else
+            footer.left:SetText(synced)
+        end
     else
         footer.left:SetText(withColor("No wishlist data. Is the desktop client running?", "o"))
     end

@@ -1,52 +1,32 @@
-sharedWowauditData = {}
 sharedWowauditProfiles = {}
 trinketPriorities = trinketPriorities or {}
+bonusRollTargets = bonusRollTargets or {}
+wishlistData = wishlistData or {}
+difficulties = difficulties or {}
 
 local difficultyOrder = {"R", "N", "H", "M"}
 
 local presentDifficulties = {}
-for character, difficulties in pairs(wishlistData) do
-    for difficulty, items in pairs(difficulties) do
-        if presentDifficulties[difficulty] == nil and items and next(items) ~= nil then
-            presentDifficulties[difficulty] = true
-        end
-    end
-end
 
-wowauditDataPresent = function()
-    if wowauditTimestamp == nil and next(sharedWowauditData) == nil then
-        return false
-    else
-        return true
-    end
-end
-
-wowauditDataToDisplay = function(itemID, itemString, character, difficultyOverride)
-    local wishes = {}
-    local timestamp = nil
-
-    for _, team in pairs(sharedWowauditData) do
-        if (not timestamp or team["timestamp"] > timestamp) and team["wishes"][itemID] and
-            team["wishes"][itemID][character] then
-            wishes = team["wishes"][itemID][character]
-            timestamp = team["timestamp"]
-        end
-    end
-
-    if wowauditTimestamp ~= nil then
-        local ownWishes = wowauditDataForCharacter(itemID, itemString, character, difficultyOverride)
-        if next(ownWishes) ~= nil then
-            if wowauditSharingSetting == 'SELF' then
-                wishes = ownWishes
-            else
-                if timestamp == nil or wowauditTimestamp > timestamp then
-                    wishes = ownWishes
-                end
+wowauditRebuildPresentDifficulties = function()
+    wipe(presentDifficulties)
+    for _, diffs in pairs(wishlistData or {}) do
+        for difficulty, items in pairs(diffs) do
+            if items and next(items) ~= nil then
+                presentDifficulties[difficulty] = true
             end
         end
     end
+end
 
-    return wishes
+wowauditRebuildPresentDifficulties()
+
+wowauditDataPresent = function()
+    return wowauditTimestamp ~= nil
+end
+
+wowauditDataToDisplay = function(itemID, itemString, character, difficultyOverride)
+    return wowauditDataForCharacter(itemID, itemString, character, difficultyOverride)
 end
 
 wowauditDataForCharacter = function(itemID, itemString, character, difficultyOverride)
@@ -102,18 +82,6 @@ wowauditCharacterDataForDifficulty = function(itemId, character, difficulty, ini
     end
 
     return wishes
-end
-
-wowauditDataForItem = function(itemID, itemString)
-    local characters = {}
-    for character, _ in pairs(wishlistData) do
-        local wishes = wowauditDataForCharacter(itemID, itemString, character)
-        if #wishes > 0 then
-            characters[character] = wishes
-        end
-    end
-
-    return characters
 end
 
 highestWishValue = function(wishes)
@@ -277,49 +245,11 @@ priorityLabel = function(rank)
     return "|cnDIM_GREEN_FONT_COLOR:P" .. rank .. "|r"
 end
 
-trinketPrioritiesForItem = function(itemID)
-    local priorities = {}
-    if not itemID or not trinketPriorities then
-        return priorities
-    end
-
-    for character, items in pairs(trinketPriorities) do
-        local rank = items[itemID]
-        if rank then
-            priorities[character] = rank
-        end
-    end
-
-    return priorities
-end
-
 trinketPriorityToDisplay = function(itemID, name)
-    if not itemID or not name then
+    if not itemID or not name or not trinketPriorities[name] then
         return nil
     end
-
-    local rank = nil
-    local timestamp = nil
-
-    for _, team in pairs(sharedWowauditData) do
-        local sharedRank = team["priorities"] and team["priorities"][itemID] and team["priorities"][itemID][name]
-        if sharedRank and (not timestamp or team["timestamp"] > timestamp) then
-            rank = sharedRank
-            timestamp = team["timestamp"]
-        end
-    end
-
-    if wowauditTimestamp ~= nil and trinketPriorities[name] and trinketPriorities[name][itemID] then
-        local ownRank = trinketPriorities[name][itemID]
-        if wowauditSharingSetting == 'SELF' then
-            return ownRank
-        end
-        if timestamp == nil or wowauditTimestamp > timestamp then
-            return ownRank
-        end
-    end
-
-    return rank
+    return trinketPriorities[name][itemID]
 end
 
 isBonusRollTarget = function(encounterID, name)
