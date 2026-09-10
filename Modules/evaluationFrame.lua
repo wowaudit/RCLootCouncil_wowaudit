@@ -884,9 +884,9 @@ end
 
 local sortChains = {
     response = {cmpResponse, cmpBis, cmpValue, cmpName},
-    bis = {cmpBis, cmpValue, cmpName},
-    value = {cmpValue, cmpName},
-    ilvl = {cmpIlvl, cmpName},
+    bis = {cmpBis, cmpValue, cmpResponse, cmpName},
+    value = {cmpValue, cmpResponse, cmpName},
+    ilvl = {cmpIlvl, cmpResponse, cmpName},
     name = {cmpName}
 }
 
