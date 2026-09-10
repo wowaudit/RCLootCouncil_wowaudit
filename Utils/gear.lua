@@ -342,9 +342,8 @@ local function groupSameSlotWishes(character, itemID, difficulty)
     return results
 end
 
--- Other items the character has wishes for in the same slot, best value first. Only
--- the locally synced wishlist covers every item; shared data only ever carries the
--- items in the current session.
+-- Other items the character has wishes for in the same slot, best value first.
+-- After a full sync the displayed wishlistData is complete for the active team.
 wowauditSameSlotWishes = function(character, itemID, difficulty)
     if not character or not itemID or not wishlistData[character] then
         return {}
