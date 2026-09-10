@@ -16,6 +16,7 @@ Data\defaults.lua
 Data\db.lua
 Data\tracks.lua
 Data\encounters.lua
+Data\tokens.lua
 
 Utils\helpers.lua
 Utils\gear.lua

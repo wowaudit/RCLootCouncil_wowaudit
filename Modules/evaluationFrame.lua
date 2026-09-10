@@ -20,19 +20,20 @@ local VISIBLE_ROWS = 8
 local SESSION_BUTTON_SIZE = 40
 local SESSION_BUTTON_GAP = 2
 local SESSION_COLUMN_WRAP = 10
-local SCROLLBAR_WIDTH = 4
+local SCROLLBAR_WIDTH = 12
 local REFRESH_DELAY = 0.1
 local RESIZE_GRIP = 8
 local MIN_SCALE, MAX_SCALE = 0.6, 1.6
 
 local SORT_LABELS = {
+    response = "Response",
+    bis = "Best in slot",
     value = "Wish value",
     ilvl = "Item level",
-    response = "Response",
     name = "Name"
 }
 
-local SORT_ORDER = {"value", "response", "ilvl", "name"}
+local SORT_ORDER = {"response", "bis", "value", "ilvl", "name"}
 
 local DIFFICULTY_LABELS = {
     R = "LFR",
@@ -108,7 +109,7 @@ end
 local function settings()
     local db = addon:Getdb()
     db.wowauditEvaluationFilters = db.wowauditEvaluationFilters or {}
-    db.wowauditEvaluationSort = db.wowauditEvaluationSort or "value"
+    db.wowauditEvaluationSort = db.wowauditEvaluationSort or "response"
     return db
 end
 
@@ -200,7 +201,8 @@ local function rankedSlotWishes(entry, sameSlot, wishes, value, priority)
         wishes = wishes,
         value = value,
         priority = priority,
-        isDropped = true
+        isDropped = true,
+        link = entry.link or entry.string
     }}
 
     for _, alternative in ipairs(sameSlot) do
@@ -336,6 +338,9 @@ end
 
 function wowauditEvaluationFrame:Show()
     local frame = self:GetFrame()
+    if frame.minimized then
+        self:ToggleMinimized()
+    end
     frame:Show()
     frame:Raise()
     self:Refresh()
@@ -494,6 +499,12 @@ function wowauditEvaluationFrame:BuildHeader(f)
     header:SetScript("OnMouseUp", function()
         f:StopMovingOrSizing()
         savePosition(f)
+        if header.lastClick and GetTime() - header.lastClick <= 0.5 then
+            header.lastClick = nil
+            wowauditEvaluationFrame:ToggleMinimized()
+        else
+            header.lastClick = GetTime()
+        end
     end)
 
     local bg = Theme:Solid(header, "BACKGROUND")
@@ -664,46 +675,28 @@ function wowauditEvaluationFrame:BuildList(f)
         wowauditEvaluationFrame:UpdateScrollbar()
     end)
 
-    local track = CreateFrame("Frame", nil, f)
-    track:SetWidth(SCROLLBAR_WIDTH)
-    track:SetPoint("TOPLEFT", scroll, "TOPRIGHT", 4, 0)
-    track:SetPoint("BOTTOMLEFT", scroll, "BOTTOMRIGHT", 4, 0)
-    Theme:Fill(track, "track", "ARTWORK")
-
-    local thumb = CreateFrame("Button", nil, track)
-    thumb:SetWidth(SCROLLBAR_WIDTH)
-    thumb:SetPoint("TOP")
-    Theme:Fill(thumb, {1, 1, 1, 0.28}, "OVERLAY")
-    thumb:RegisterForDrag("LeftButton")
-
-    thumb:SetScript("OnDragStart", function(self)
-        self.dragOrigin = select(2, GetCursorPosition()) / UIParent:GetEffectiveScale()
-        self.scrollOrigin = scroll:GetVerticalScroll()
-        self:SetScript("OnUpdate", function(thumb)
-            local range = math.max(0, child:GetHeight() - scroll:GetHeight())
-            if range == 0 then
-                return
-            end
-
-            local travel = track:GetHeight() - thumb:GetHeight()
-            if travel <= 0 then
-                return
-            end
-
-            local cursor = select(2, GetCursorPosition()) / UIParent:GetEffectiveScale()
-            local moved = (thumb.dragOrigin - cursor) / travel * range
-            scroll:SetVerticalScroll(math.min(range, math.max(0, thumb.scrollOrigin + moved)))
-            wowauditEvaluationFrame:UpdateScrollbar()
-        end)
+    local slider = Theme:ScrollBar(f, SCROLLBAR_WIDTH)
+    slider:SetPoint("TOPLEFT", scroll, "TOPRIGHT", 4, 0)
+    slider:SetPoint("BOTTOMLEFT", scroll, "BOTTOMRIGHT", 4, 0)
+    slider:SetScript("OnValueChanged", function(bar, value)
+        if bar.updating then
+            return
+        end
+        scroll:SetVerticalScroll(value)
     end)
-    thumb:SetScript("OnDragStop", function(self)
-        self:SetScript("OnUpdate", nil)
+
+    scroll:SetScript("OnVerticalScroll", function(_, offset)
+        if slider.updating or slider:GetValue() == offset then
+            return
+        end
+        slider.updating = true
+        slider:SetValue(offset)
+        slider.updating = false
     end)
 
     f.scroll = scroll
     f.scrollChild = child
-    f.scrollTrack = track
-    f.scrollThumb = thumb
+    f.scrollBar = slider
 
     f.rowPool = CreateObjectPool(function()
         return Row:Create(child)
@@ -737,29 +730,26 @@ end
 
 function wowauditEvaluationFrame:UpdateScrollbar()
     local f = self.frame
-    local range = f.scrollChild:GetHeight()
-    local visible = f.scroll:GetHeight()
+    local range = math.max(0, f.scrollChild:GetHeight() - f.scroll:GetHeight())
 
-    if range <= visible then
-        -- Filtering down to fewer rows can leave the view scrolled past the content.
+    if range <= 0 then
         f.scroll:SetVerticalScroll(0)
-        f.scrollTrack:Hide()
+        f.scrollBar.updating = true
+        f.scrollBar:SetMinMaxValues(0, 0)
+        f.scrollBar.updating = false
+        f.scrollBar:Hide()
         return
     end
 
-    if f.scroll:GetVerticalScroll() > range - visible then
-        f.scroll:SetVerticalScroll(range - visible)
+    if f.scroll:GetVerticalScroll() > range then
+        f.scroll:SetVerticalScroll(range)
     end
 
-    f.scrollTrack:Show()
-
-    local trackHeight = f.scrollTrack:GetHeight()
-    local thumbHeight = math.max(20, trackHeight * (visible / range))
-    local travel = trackHeight - thumbHeight
-    local progress = f.scroll:GetVerticalScroll() / (range - visible)
-
-    f.scrollThumb:SetHeight(thumbHeight)
-    f.scrollThumb:SetPoint("TOP", f.scrollTrack, "TOP", 0, -travel * progress)
+    f.scrollBar:Show()
+    f.scrollBar.updating = true
+    f.scrollBar:SetMinMaxValues(0, range)
+    f.scrollBar:SetValue(f.scroll:GetVerticalScroll())
+    f.scrollBar.updating = false
 end
 
 -- Everything a row needs, gathered per candidate so the row itself only draws.
@@ -772,7 +762,6 @@ function wowauditEvaluationFrame:BuildRowData(entry, session)
     local bonusRoll = wowauditBonusRollInfo()
     local bonusRollIcon = bonusRoll and bonusRoll.icon or nil
     local icons = crestIconsByTrack()
-    local encounterID = wowauditEncounterForItem(entry.itemID)
 
     local rows = {}
     local best = 0
@@ -786,10 +775,11 @@ function wowauditEvaluationFrame:BuildRowData(entry, session)
             local profile = wowauditProfileForCharacter(name)
             local value = highestWishValue(wishes)
             local sameSlot = wowauditSameSlotWishes(name, entry.itemID, difficulty)
-            local bonusLoot = wowauditBonusLootFor(name, encounterID)
+            local bonusLoot = wowauditBonusLootFor(name, entry.itemID)
 
             requestIfUncached(candidate.gear1)
             requestIfUncached(candidate.gear2)
+            requestIfUncached(entry.link or entry.string)
             requestIfUncached(bonusLoot and bonusLoot.itemID)
             for _, alternative in ipairs(sameSlot) do
                 requestIfUncached(alternative.id)
@@ -811,6 +801,17 @@ function wowauditEvaluationFrame:BuildRowData(entry, session)
 
             local priority = trinketPriorityToDisplay(entry.itemID, name)
 
+            local slotWishes = rankedSlotWishes(entry, sameSlot, wishes, value, priority)
+            local droppedRank = 999
+            for index, wish in ipairs(slotWishes) do
+                if wish.isDropped then
+                    if wishes and #wishes > 0 then
+                        droppedRank = index
+                    end
+                    break
+                end
+            end
+
             tinsert(rows, {
                 name = name,
                 class = candidate.class,
@@ -827,12 +828,13 @@ function wowauditEvaluationFrame:BuildRowData(entry, session)
                 gear2 = candidate.gear2,
                 wishes = wishes,
                 wishValue = value,
+                droppedRank = droppedRank,
                 itemTrack = itemTrack,
                 priority = priority,
                 bonusRollTarget = wowauditBonusRollTargetForItem(entry.itemID, name),
                 bonusRollIcon = bonusRollIcon,
                 bonusLoot = bonusLoot,
-                slotWishes = rankedSlotWishes(entry, sameSlot, wishes, value, priority),
+                slotWishes = slotWishes,
                 profile = profile,
                 crestIcons = icons,
                 catalystIcon = catalyst and catalyst.icon,
@@ -848,18 +850,44 @@ function wowauditEvaluationFrame:BuildRowData(entry, session)
     return rows, profilesFound
 end
 
--- Each sort exposes a single numeric key so ties can fall through to the name
--- without evaluating a comparator twice per comparison.
-local sortKeys = {
-    value = function(row)
-        return -row.wishValue
-    end,
-    ilvl = function(row)
-        return -(tonumber(row.ilvl) or 0)
-    end,
-    response = function(row)
-        return row.responseSort
+local function cmpName(a, b)
+    if a.name ~= b.name then
+        return a.name < b.name
     end
+end
+
+local function cmpValue(a, b)
+    if a.wishValue ~= b.wishValue then
+        return a.wishValue > b.wishValue
+    end
+end
+
+local function cmpBis(a, b)
+    local aRank, bRank = a.droppedRank or 999, b.droppedRank or 999
+    if aRank ~= bRank then
+        return aRank < bRank
+    end
+end
+
+local function cmpResponse(a, b)
+    if a.responseSort ~= b.responseSort then
+        return a.responseSort < b.responseSort
+    end
+end
+
+local function cmpIlvl(a, b)
+    local aIlvl, bIlvl = tonumber(a.ilvl) or 0, tonumber(b.ilvl) or 0
+    if aIlvl ~= bIlvl then
+        return aIlvl > bIlvl
+    end
+end
+
+local sortChains = {
+    response = {cmpResponse, cmpBis, cmpValue, cmpName},
+    bis = {cmpBis, cmpValue, cmpName},
+    value = {cmpValue, cmpName},
+    ilvl = {cmpIlvl, cmpName},
+    name = {cmpName}
 }
 
 function wowauditEvaluationFrame:Refresh()
@@ -888,16 +916,14 @@ function wowauditEvaluationFrame:Refresh()
 
     local rows, profilesFound = self:BuildRowData(entry, session)
 
-    local keyFor = sortKeys[settings().wowauditEvaluationSort]
-    if keyFor then
-        for _, row in ipairs(rows) do
-            row.sortKey = keyFor(row)
-        end
-    end
+    local chain = sortChains[settings().wowauditEvaluationSort] or sortChains.response
 
     table.sort(rows, function(a, b)
-        if keyFor and a.sortKey ~= b.sortKey then
-            return a.sortKey < b.sortKey
+        for _, compare in ipairs(chain) do
+            local ordered = compare(a, b)
+            if ordered ~= nil then
+                return ordered
+            end
         end
         return a.name < b.name
     end)
@@ -929,7 +955,7 @@ function wowauditEvaluationFrame:RefreshHeader(entry)
     local crestsLabel = self.frame.columnHeader.labels.crests
 
     header.valueButton:SetLabel(wowauditValueDisplay == "VALUE" and "Show %" or "Show value")
-    header.sortButton:SetLabel("Sort: " .. (SORT_LABELS[settings().wowauditEvaluationSort] or "Wish value"))
+    header.sortButton:SetLabel("Sort: " .. (SORT_LABELS[settings().wowauditEvaluationSort] or "Response"))
     local _, nativeDifficulty = wishLookupDifficulty(entry)
     local shownDifficulty = wishDifficultyOverride or nativeDifficulty
     header.difficultyButton:SetLabel("Wishes: " .. (DIFFICULTY_LABELS[shownDifficulty] or "Auto"))
@@ -1183,7 +1209,7 @@ end
 function wowauditEvaluationFrame:ToggleMinimized()
     local f = self.frame
     local db = addon:Getdb()
-    local body = {f.tabs, f.columnHeader, f.scroll, f.scrollTrack, f.footer, f.resizeGrip}
+    local body = {f.tabs, f.columnHeader, f.scroll, f.scrollBar, f.footer, f.resizeGrip}
 
     if f.minimized then
         f.minimized = false

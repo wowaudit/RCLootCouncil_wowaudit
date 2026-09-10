@@ -125,13 +125,14 @@ local optionsTable = {
                             name = "Evaluation window sorting",
                             desc = "Choose how the rows in the evaluation window are ordered by default.",
                             values = {
-                                value = "Wish value",
                                 response = "Response",
+                                bis = "Best in slot",
+                                value = "Wish value",
                                 ilvl = "Item level",
                                 name = "Name"
                             },
                             get = function(info)
-                                return addon:Getdb().wowauditEvaluationSort or "value"
+                                return addon:Getdb().wowauditEvaluationSort or "response"
                             end,
                             set = function(info, value)
                                 addon:Getdb().wowauditEvaluationSort = value
@@ -206,7 +207,7 @@ function RCwowaudit:ShowWishes()
 end
 
 function RCwowaudit:ShowEvaluation()
-    self:GetModule("wowauditEvaluationFrame"):Toggle()
+    self:GetModule("wowauditEvaluationFrame"):Show()
 end
 
 -- Shared by the options panel and the toggle buttons in both frames, so the setting

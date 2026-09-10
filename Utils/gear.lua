@@ -253,15 +253,20 @@ wowauditSlotForItem = function(itemID)
     end
 
     local slot
-    local _, _, _, equipLoc = C_Item.GetItemInfoInstant(itemID)
-
-    if equipLoc and slotByEquipLoc[equipLoc] then
-        slot = slotByEquipLoc[equipLoc]
+    local tokenSlot = wowauditTokenSlots and wowauditTokenSlots[itemID]
+    if tokenSlot then
+        slot = tokenSlot
     else
-        -- Tier tokens have no equip location of their own; RCLootCouncil knows which
-        -- slot they turn into.
-        local tokenEquipLoc = addon:GetTokenEquipLoc(itemID)
-        slot = tokenEquipLoc and slotByEquipLoc[tokenEquipLoc] or nil
+        local _, _, _, equipLoc = C_Item.GetItemInfoInstant(itemID)
+
+        if equipLoc and slotByEquipLoc[equipLoc] then
+            slot = slotByEquipLoc[equipLoc]
+        else
+            -- Tier tokens have no equip location of their own; RCLootCouncil knows
+            -- which slot they turn into, for older tokens not in Data/tokens.lua.
+            local tokenEquipLoc = addon:GetTokenEquipLoc(itemID)
+            slot = tokenEquipLoc and slotByEquipLoc[tokenEquipLoc] or nil
+        end
     end
 
     slotCache[itemID] = slot or false

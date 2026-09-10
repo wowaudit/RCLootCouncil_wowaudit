@@ -318,12 +318,6 @@ function Row:BuildPlayerBlock(row)
 
     row.noteButton = createNoteIcon(responseLine, row)
     row.noteButton:SetPoint("LEFT", row.responsePill, "RIGHT", 4, 0)
-
-    row.rollText = Theme:Value(row, 11)
-    row.rollText:SetTextColor(Theme:Color("dim"))
-    row.rollText:SetPoint("TOPLEFT", x, lineY(3))
-    row.rollText:SetWidth(width)
-    row.rollText:SetWordWrap(false)
 end
 
 -- Trinkets and rings mean two equipped items compete with the drop, and
@@ -369,15 +363,11 @@ function Row:BuildWishesBlock(row)
         line:SetSize(width, LINE_HEIGHT)
         line:SetPoint("TOPLEFT", x, lineY(index))
 
-        line.highlight = Theme:Solid(line, "BACKGROUND", 3)
-        line.highlight:SetAllPoints()
-        line.highlight:SetVertexColor(Theme:Color("accent", 0.13))
-
-        line.marker = Theme:Solid(line, "ARTWORK")
-        line.marker:SetWidth(2)
-        line.marker:SetPoint("TOPLEFT", -4, 0)
-        line.marker:SetPoint("BOTTOMLEFT", -4, 0)
-        line.marker:SetVertexColor(Theme:Color("accent"))
+        line.rank = Theme:Value(line, 11)
+        line.rank:SetPoint("LEFT")
+        line.rank:SetWidth(16)
+        line.rank:SetJustifyH("LEFT")
+        line.rank:SetTextColor(Theme:Color("dim"))
 
         -- Spec percents are sized to their text and pinned right so they never
         -- clip. The item name is the one that yields space.
@@ -390,21 +380,11 @@ function Row:BuildWishesBlock(row)
         line.note:SetPoint("RIGHT", line.value, "LEFT", -3, 0)
 
         line.chip = Theme:ItemChip(line, width, 14)
-        line.chip:SetPoint("LEFT")
+        line.chip:SetPoint("LEFT", line.rank, "RIGHT", 2, 0)
         line.chip:SetPoint("RIGHT", line.note, "LEFT", -4, 0)
 
         row.wishes[index] = line
     end
-
-    -- Shown instead of the ranked list when the character has no wish in this slot at
-    -- all, so the dropped item isn't drawn just to be labelled "Not on wishlist".
-    row.wishesEmpty = Theme:Value(row, 12)
-    row.wishesEmpty:SetTextColor(Theme:Color("dim"))
-    row.wishesEmpty:SetPoint("TOPLEFT", x, lineY(1))
-    row.wishesEmpty:SetWidth(width)
-    row.wishesEmpty:SetJustifyH("LEFT")
-    row.wishesEmpty:SetWordWrap(false)
-    row.wishesEmpty:Hide()
 end
 
 -- Crests for the dropped item's track only. Line 1 is held + still earnable;
@@ -484,6 +464,11 @@ function Row:BuildAwardBlock(row)
 
     row.awardedPill = Theme:Pill(row, 18)
     row.awardedPill:SetPoint("TOPLEFT", x, lineY(1))
+
+    row.responseEcho = Theme:Value(row, 11)
+    row.responseEcho:SetPoint("TOPLEFT", x, lineY(2) + 1)
+    row.responseEcho:SetWidth(width - 8)
+    row.responseEcho:SetWordWrap(false)
 end
 
 function Row:SetData(row, data, index)
@@ -577,16 +562,6 @@ function Row:SetPlayerData(row, data, r, g, b)
         local maxWidth = math.max(24, row.responseLine:GetWidth() - reserved)
         row.responsePill:SetWidth(math.min(row.responsePill:GetWidth(), maxWidth))
     end
-
-    local details = {}
-    if data.roll then
-        tinsert(details, "roll " .. data.roll)
-    end
-    if data.votes and data.votes > 0 then
-        tinsert(details, data.votes .. (data.votes == 1 and " vote" or " votes"))
-    end
-    row.rollText:SetText(table.concat(details, " · "))
-    row.rollText:SetShown(row.lines >= 3)
 end
 
 function Row:SetEquippedData(row, data)
@@ -629,33 +604,16 @@ end
 function Row:SetWishesData(row, data)
     local entries = data.slotWishes
 
-    -- The dropped item is always in the list; if it's the only entry and the character
-    -- has no wish on it, there is nothing to rank. One muted line reads better than the
-    -- dropped item drawn next to "Not on wishlist".
-    if #entries == 1 and entries[1].isDropped and not specWishesText(entries[1].wishes) then
-        for _, line in ipairs(row.wishes) do
-            line:Hide()
-        end
-        row.wishesEmpty:SetText(wowauditDataPresent() and "No wishes in this slot" or
-                                    withColor("No wowaudit data", "o"))
-        row.wishesEmpty:Show()
-        return
-    end
-
-    row.wishesEmpty:Hide()
-
     for index, line in ipairs(row.wishes) do
         local wish = entries[index]
 
         if not wish then
             line:Hide()
         else
-            line.chip:SetItem(wowauditWishItemLink(wish.id, wish.bonus))
-
-            -- The item actually being rolled for has to stand out from the
-            -- alternatives it is being compared against.
-            line.highlight:SetShown(wish.isDropped)
-            line.marker:SetShown(wish.isDropped)
+            local link = wish.link or wowauditWishItemLink(wish.id, wish.bonus)
+            line.chip:SetItem(link)
+            line.chip:SetMuted(not wish.isDropped)
+            line.rank:SetText(index .. ".")
 
             local text = specWishesText(wish.wishes)
             if not text then
@@ -808,9 +766,16 @@ function Row:SetAwardData(row, data)
     if winner then
         row.awardButton:Hide()
         row.awardedPill:Set("Awarded", Theme:Color("accent"))
-        return
+    else
+        row.awardedPill:Hide()
+        row.awardButton:Show()
     end
 
-    row.awardedPill:Hide()
-    row.awardButton:Show()
+    if data.responseText then
+        row.responseEcho:SetText(data.responseText)
+        row.responseEcho:SetTextColor(unpack(data.responseColor or {1, 1, 1}))
+        row.responseEcho:Show()
+    else
+        row.responseEcho:Hide()
+    end
 end

@@ -58,15 +58,21 @@ function wowauditBonusLoot:Prune()
     end
 end
 
--- What a character won from their bonus roll on a given encounter, if anything.
-wowauditBonusLootFor = function(name, encounterID)
-    if not name or not encounterID then
+-- What a character won from their bonus roll on the same encounter as this item.
+-- Both sides come from Data/encounters.lua (won item vs dropped item).
+wowauditBonusLootFor = function(name, droppedItemID)
+    if not name or not droppedItemID then
+        return nil
+    end
+
+    local encounter = wowauditItemEncounters and wowauditItemEncounters[droppedItemID]
+    if not encounter then
         return nil
     end
 
     local newest = nil
     for _, entry in ipairs(store()) do
-        if entry.name == name and entry.encounter == encounterID then
+        if entry.name == name and wowauditItemEncounters[entry.itemID] == encounter then
             if not newest or (entry.time or 0) > (newest.time or 0) then
                 newest = entry
             end

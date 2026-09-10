@@ -233,6 +233,7 @@ function Theme:ItemChip(parent, width, iconSize)
     local chip = CreateFrame("Frame", nil, parent)
     chip:SetSize(width or 150, iconSize or 18)
     chip:EnableMouse(true)
+    chip.iconSize = iconSize or 18
 
     chip.icon = self:Icon(chip, iconSize or 18)
     chip.icon:SetPoint("LEFT")
@@ -274,6 +275,25 @@ function Theme:ItemChip(parent, width, iconSize)
             self.name:SetTextColor(Theme:Color("value"))
         end
         self:Show()
+    end
+
+    -- Alternatives in the wishes column: smaller icon/name, dimmed name. Wish
+    -- values stay on a separate fontstring so they keep their b/n/o colours.
+    function chip:SetMuted(muted)
+        local size = muted and 12 or self.iconSize
+        self.icon:SetSize(size, size)
+        self.name:SetFont(Theme:Font(muted and 11 or 12))
+        if muted then
+            self.name:SetTextColor(Theme:Color("dim"))
+        elseif self.link then
+            local _, _, quality = C_Item.GetItemInfo(self.link)
+            local color = quality and ITEM_QUALITY_COLORS[quality]
+            if color then
+                self.name:SetTextColor(color.r, color.g, color.b)
+            else
+                self.name:SetTextColor(Theme:Color("value"))
+            end
+        end
     end
 
     return chip
@@ -410,6 +430,33 @@ function Theme:Slider(parent, width, minimum, maximum, step)
     local thumb = slider:CreateTexture(nil, "OVERLAY")
     thumb:SetTexture(SOLID)
     thumb:SetSize(6, 14)
+    thumb:SetVertexColor(self:Color("accent"))
+    slider:SetThumbTexture(thumb)
+
+    return slider
+end
+
+-- Vertical list scrollbar. Blizzard's Slider owns hit-testing and drag; we only
+-- skin it and wire min/max to the ScrollFrame range.
+function Theme:ScrollBar(parent, width)
+    width = width or 12
+    local slider = CreateFrame("Slider", nil, parent)
+    slider:SetOrientation("VERTICAL")
+    slider:SetWidth(width)
+    slider:SetMinMaxValues(0, 0)
+    slider:SetValueStep(1)
+    slider:SetObeyStepOnDrag(true)
+
+    local track = self:Solid(slider, "ARTWORK")
+    track:SetWidth(2)
+    track:SetPoint("TOP")
+    track:SetPoint("BOTTOM")
+    track:SetPoint("CENTER")
+    track:SetVertexColor(self:Color("track"))
+
+    local thumb = slider:CreateTexture(nil, "OVERLAY")
+    thumb:SetTexture(SOLID)
+    thumb:SetSize(width, 24)
     thumb:SetVertexColor(self:Color("accent"))
     slider:SetThumbTexture(thumb)
 

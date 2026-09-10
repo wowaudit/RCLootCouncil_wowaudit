@@ -178,7 +178,7 @@ function wowauditVotingFrame:AddButtonToFrame()
     evaluateButton:SetSize(110, 25)
     evaluateButton:SetPoint("RIGHT", valueDisplayButton, "LEFT", -10, 0)
     evaluateButton:SetScript("OnClick", function()
-        RCwowaudit:GetModule("wowauditEvaluationFrame"):Toggle()
+        RCwowaudit:GetModule("wowauditEvaluationFrame"):Show()
     end)
 
     f.wowauditEvaluateButton = evaluateButton
@@ -230,7 +230,7 @@ function wowauditVotingFrame:AddButtonToFrame()
         self.bg:SetVertexColor(Theme:Color("header"))
     end)
     tab:SetScript("OnClick", function()
-        RCwowaudit:GetModule("wowauditEvaluationFrame"):Toggle()
+        RCwowaudit:GetModule("wowauditEvaluationFrame"):Show()
     end)
 
     f.wowauditEvaluateTab = tab
