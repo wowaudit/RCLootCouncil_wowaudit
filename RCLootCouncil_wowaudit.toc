@@ -12,6 +12,7 @@
 
 core.lua
 
+Data\defaults.lua
 Data\db.lua
 Data\tracks.lua
 Data\encounters.lua

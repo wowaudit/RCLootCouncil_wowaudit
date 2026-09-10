@@ -19,6 +19,13 @@ jobs:
         with:
           fetch-depth: 0
 
+      # db.lua is gitignored (desktop writes live raid data there). The TOC still
+      # lists it, so the CurseForge zip needs the empty shell from defaults.lua.
+      - name: Seed empty db.lua for TOC
+        run: |
+          cp Data/defaults.lua Data/db.lua
+          git add -f Data/db.lua
+
       - uses: BigWigsMods/packager@v2
         with:
           pkgmeta: .pkgmeta
