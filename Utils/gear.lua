@@ -230,6 +230,60 @@ wowauditTrackColor = function(trackName)
     return color.r, color.g, color.b
 end
 
+-- Lower index is better (Myth = 1).
+local function trackRank(trackName)
+    if not trackName then
+        return nil
+    end
+    for index, name in ipairs(wowauditTrackOrder) do
+        if name == trackName then
+            return index
+        end
+    end
+end
+
+local function trackOfEquipped(link)
+    return wowauditTrackForItem(link, true) or wowauditCraftedInfoForItem(link)
+end
+
+-- The equipped piece of this item on the same or a better track than the drop,
+-- or nil if the drop could still be an upgrade.
+wowauditAlreadyHasDroppedItem = function(itemID, droppedTrack, equippedLinks)
+    itemID = tonumber(itemID)
+    local droppedRank = trackRank(droppedTrack and droppedTrack.track)
+    if not itemID or not droppedRank then
+        return nil
+    end
+
+    for _, link in ipairs(equippedLinks or {}) do
+        if link then
+            local equippedID = C_Item.GetItemInfoInstant(link)
+            if not equippedID then
+                local raw = tostring(link)
+                equippedID = tonumber(raw:match("^item:(%d+)") or raw:match("^(%d+)"))
+            end
+            if tonumber(equippedID) == itemID then
+                local equipped = trackOfEquipped(link)
+                local equippedRank = trackRank(equipped and equipped.track)
+                if equippedRank and equippedRank <= droppedRank then
+                    return equipped
+                end
+            end
+        end
+    end
+end
+
+wowauditPlayerEquippedLinks = function()
+    local links = {}
+    for _, slot in ipairs(equippedSlots) do
+        local link = GetInventoryItemLink("player", slot)
+        if link then
+            tinsert(links, link)
+        end
+    end
+    return links
+end
+
 local function itemStringFromLink(itemStringOrLink)
     local raw = tostring(itemStringOrLink)
     local itemString = string.match(raw, "item:[%d:%-]+")
@@ -393,7 +447,7 @@ local function groupSameSlotWishes(character, itemID, difficulty)
     local byItem = {}
 
     for _, wish in ipairs(wishlistData[character][resolved]) do
-        if wish.id ~= itemID and wowauditSlotForItem(wish.id) == slot then
+        if tonumber(wish.id) ~= tonumber(itemID) and wowauditSlotForItem(wish.id) == slot then
             if not byItem[wish.id] then
                 byItem[wish.id] = {}
                 tinsert(results, {

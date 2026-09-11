@@ -12,7 +12,7 @@ local TOP_PADDING = 6
 local ITEM_ICON_SIZE = 16
 
 Row.MIN_LINES = 2
-Row.MAX_WISHES_IN_SLOT = 5
+Row.MAX_WISHES_IN_SLOT = wowauditSlotWishes.MAX
 Row.SPACING = 4
 
 function Row.HeightFor(lines)
@@ -35,7 +35,6 @@ Row.columns = {
 
 Row.WIDTH = 1084
 
-local MAX_SPEC_WISHES_SHOWN = 3
 local MAX_EQUIPPED_SHOWN = 2
 local HOVER_ALPHA = 0.06
 local NOTE_ICON = "Interface/BUTTONS/UI-GuildButton-PublicNote-Up.png"
@@ -97,34 +96,6 @@ local function createNoteIcon(parent, row)
 
     button:Hide()
     return button
-end
-
-local function wishCommentLines(wishes)
-    local lines = {}
-    for _, wish in ipairs(wishes or {}) do
-        wish = transformWish(wish)
-        if wish.comment and wish.comment ~= "" then
-            tinsert(lines, specIcon(wish.spec, 12) .. " " .. wish.comment)
-        end
-    end
-    return lines
-end
-
-local function specWishesText(wishes)
-    if not wishes or #wishes == 0 then
-        return nil
-    end
-
-    local parts = {}
-    for index, wish in ipairs(wishes) do
-        if index > MAX_SPEC_WISHES_SHOWN then
-            tinsert(parts, "|cff6b6f7a+" .. (#wishes - MAX_SPEC_WISHES_SHOWN) .. "|r")
-            break
-        end
-        tinsert(parts, displayWish(wish))
-    end
-
-    return table.concat(parts, "  ")
 end
 
 -- Icons plus 1/6 labels for every equipped piece on the dropped item's track.
@@ -413,38 +384,15 @@ function Row:BuildEquippedBlock(row)
 end
 
 -- The dropped item and every other item this character wants in the same slot, in
--- one ranked list. The dropped item is always present, even with no wishes.
+-- one ranked list. Empty wishlists show a short message instead.
 function Row:BuildWishesBlock(row)
     local x, width = columnX("wishes")
 
-    row.wishes = {}
-    for index = 1, Row.MAX_WISHES_IN_SLOT do
-        local line = CreateFrame("Frame", nil, row)
-        line:SetSize(width, LINE_HEIGHT)
-        line:SetPoint("TOPLEFT", x, lineY(index))
-
-        line.rank = Theme:Value(line, 11)
-        line.rank:SetPoint("LEFT")
-        line.rank:SetWidth(16)
-        line.rank:SetJustifyH("LEFT")
-        line.rank:SetTextColor(Theme:Color("dim"))
-
-        -- Spec percents are sized to their text and pinned right so they never
-        -- clip. The item name is the one that yields space.
-        line.value = Theme:Value(line, 12)
-        line.value:SetPoint("RIGHT")
-        line.value:SetJustifyH("RIGHT")
-        line.value:SetWordWrap(false)
-
-        line.note = createNoteIcon(line, row)
-        line.note:SetPoint("RIGHT", line.value, "LEFT", -3, 0)
-
-        line.chip = Theme:ItemChip(line, width, 14)
-        line.chip:SetPoint("LEFT", line.rank, "RIGHT", 2, 0)
-        line.chip:SetPoint("RIGHT", line.note, "LEFT", -4, 0)
-
-        row.wishes[index] = line
-    end
+    row.slotWishes = wowauditSlotWishes:Create(row, width, {
+        lineHeight = LINE_HEIGHT,
+        litRow = row
+    })
+    row.slotWishes:SetPoint("TOPLEFT", x, lineY(1))
 end
 
 -- Crests for the dropped item's track only. Line 1 is held + still earnable;
@@ -653,62 +601,7 @@ function Row:SetEquippedData(row, data)
 end
 
 function Row:SetWishesData(row, data)
-    local entries = data.slotWishes
-
-    for index, line in ipairs(row.wishes) do
-        local wish = entries[index]
-
-        if not wish then
-            line:Hide()
-        else
-            local link = wish.link or wowauditWishItemLink(wish.id, wish.bonus)
-            line.chip:SetItem(link)
-            line.chip:SetMuted(not wish.isDropped)
-            if wish.isDropped then
-                line.rank:SetFont(Theme:Font(12))
-                line.rank:SetTextColor(Theme:Color("value"))
-                line.value:SetFont(Theme:Font(12))
-                line.value:SetAlpha(1)
-            else
-                line.rank:SetFont(Theme:Font(11))
-                line.rank:SetTextColor(Theme:Color("dim"))
-                line.value:SetFont(Theme:Font(11))
-                line.value:SetAlpha(0.55)
-            end
-            line.rank:SetText(index .. ".")
-
-            local text = specWishesText(wish.wishes)
-            if not text then
-                text = wowauditDataPresent() and "|cff6b6f7aNot on wishlist|r" or
-                           withColor("No wowaudit data", "o")
-            end
-
-            if wish.priority then
-                text = priorityLabel(wish.priority) .. " " .. text
-            end
-            -- Same suffix the voting frame uses when the wish came from another
-            -- difficulty than the item on the table.
-            local diff = wish.difficulty or (wish.wishes and wish.wishes[1] and wish.wishes[1].difficulty)
-            if diff then
-                text = text .. " |cff6b6f7a(" .. diff .. ")|r"
-            end
-            if wish.id and wowauditBonusRollTargetForItem(wish.id, data.name) then
-                text = diceIcon .. " " .. text
-            end
-
-            line.value:SetText(text)
-            line.value:SetWidth(math.max(1, line.value:GetStringWidth()))
-
-            local comments = wishCommentLines(wish.wishes)
-            if #comments > 0 then
-                line.note:SetNote("Wishlist comment", unpack(comments))
-            else
-                line.note:SetNote()
-            end
-
-            line:Show()
-        end
-    end
+    wowauditSlotWishes:Set(row.slotWishes, data)
 end
 
 function Row:SetCrestsData(row, data)
@@ -723,8 +616,13 @@ function Row:SetCrestsData(row, data)
     end
 
     -- No profile means this candidate isn't running the addon, so they can't share what
-    -- they hold. Say so rather than leaving the column blank.
+    -- they hold. Say so rather than leaving the column blank — unless RCLC already
+    -- marked them unreachable (offline / RCLC not installed).
     if not profile then
+        if data.response == "NOTHING" then
+            block:Hide()
+            return
+        end
         block.icon:Hide()
         block.held:Hide()
         block.earnable:Hide()

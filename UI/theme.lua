@@ -413,6 +413,23 @@ function Theme:AttachTooltip(frame)
     return frame
 end
 
+-- Same "?" used on the evaluation "Wishes in this slot" column.
+function Theme:WishColorHelp(parent, size, fontSize)
+    size = size or 18
+    local help = CreateFrame("Frame", nil, parent)
+    help:SetSize(size, size)
+
+    local glyph = self:Label(help, "?")
+    if fontSize then
+        glyph:SetFont(self:Font(fontSize))
+    end
+    glyph:SetPoint("CENTER")
+
+    self:AttachTooltip(help)
+    help:SetTooltip(wowauditWishColorLegend())
+    return help
+end
+
 function Theme:Slider(parent, width, minimum, maximum, step)
     local slider = CreateFrame("Slider", nil, parent)
     slider:SetOrientation("HORIZONTAL")
@@ -457,7 +474,7 @@ function Theme:ScrollBar(parent, width)
     local thumb = slider:CreateTexture(nil, "OVERLAY")
     thumb:SetTexture(SOLID)
     thumb:SetSize(width, 24)
-    thumb:SetVertexColor(self:Color("accent"))
+    thumb:SetVertexColor(1, 1, 1, 0.28)
     slider:SetThumbTexture(thumb)
 
     return slider

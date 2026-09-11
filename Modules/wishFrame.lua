@@ -7,6 +7,7 @@ local wowauditWishFrame = RCwowaudit:NewModule("wowauditWishFrame", "AceComm-3.0
 
 local ROW_HEIGHT = 20
 local SHARE_STATUS_HEIGHT = 16
+local FRAME_NAME = "RCwowauditWishFrame"
 
 local DIFFICULTIES = {
     N = "Normal",
@@ -116,7 +117,7 @@ function wowauditWishFrame:Show()
                 end
 
                 local priority = trinketPriorities[character] and trinketPriorities[character][item.id]
-                local valueText = withColor(item.value, item.status)
+                local valueText = withColor(item.value, wishDisplayColor(item))
                 if priority then
                     valueText = priorityLabel(priority) .. ", " .. valueText
                     seenPriorityItems[character .. ":" .. item.id] = true
@@ -202,7 +203,7 @@ function wowauditWishFrame:GetFrame()
     if self.frame then
         return self.frame
     end
-    local f = addon.UI:NewNamed("RCFrame", UIParent, "RCwowauditWishFrame", "RCLootCouncil - wowaudit - Wishes", 250)
+    local f = addon.UI:NewNamed("RCFrame", UIParent, FRAME_NAME, "RCLootCouncil - wowaudit - Wishes", 250)
 
     local st = ST:CreateST(self.scrollCols, 25, ROW_HEIGHT, nil, f.content)
     st.frame:SetPoint("TOPLEFT", f, "TOPLEFT", 10, -35)
@@ -276,6 +277,8 @@ function wowauditWishFrame:GetFrame()
     f.shareStatus = strip
     strip.bar = bar
     strip.label = label
+
+    tinsert(UISpecialFrames, FRAME_NAME)
 
     return f
 end

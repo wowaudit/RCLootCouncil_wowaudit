@@ -215,12 +215,22 @@ end
 function RCwowaudit:SetValueDisplay(value)
     addon:Getdb().wowauditValueDisplay = value
     wowauditValueDisplay = value
+
+    local loot = self:GetModule("wowauditLootFrame", true)
+    if loot and loot.RefreshVisible then
+        loot:RefreshVisible()
+    end
 end
 
 function RCwowaudit:RefreshEvaluationFrame()
     local module = self:GetModule("wowauditEvaluationFrame", true)
     if module then
         module:Refresh()
+    end
+
+    local loot = self:GetModule("wowauditLootFrame", true)
+    if loot and loot.RefreshVisible then
+        loot:RefreshVisible()
     end
 end
 

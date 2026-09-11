@@ -183,53 +183,6 @@ local function wishLookupDifficulty(entry)
     return wishDifficultyOverride or native, native
 end
 
--- The dropped item and the character's other wishes for that slot, ranked together
--- so the council can see where the drop sits among the alternatives. The dropped
--- item is always in the list even with no wishes at all.
-local function rankedSlotWishes(entry, sameSlot, wishes, value, priority)
-    local bonus
-    for _, wish in ipairs(wishes or {}) do
-        bonus = wish.b or wish.bonus
-        if bonus then
-            break
-        end
-    end
-
-    local ranked = {{
-        id = entry.itemID,
-        bonus = bonus,
-        wishes = wishes,
-        value = value,
-        priority = priority,
-        isDropped = true,
-        -- Dropped-item tooltip only when this character has no wish; otherwise
-        -- the chip uses the wish's bonus IDs.
-        link = (not wishes or #wishes == 0) and (entry.link or entry.string) or nil
-    }}
-
-    for _, alternative in ipairs(sameSlot) do
-        tinsert(ranked, alternative)
-    end
-
-    table.sort(ranked, function(a, b)
-        if a.value == b.value then
-            return a.isDropped or (not b.isDropped and a.id < b.id)
-        end
-        return a.value > b.value
-    end)
-
-    while #ranked > Row.MAX_WISHES_IN_SLOT do
-        -- Never drop the item actually being rolled for to make room.
-        local last = ranked[#ranked]
-        if last.isDropped then
-            ranked[#ranked - 1] = last
-        end
-        table.remove(ranked)
-    end
-
-    return ranked
-end
-
 -- Crest currency icons are the same for everyone, so they are resolved once and
 -- shared by every row.
 local function crestIconsByTrack()
@@ -616,7 +569,7 @@ function wowauditEvaluationFrame:BuildHeader(f)
         wowauditEvaluationFrame:ToggleScaleSlider()
     end)
 
-    header.filterButton = Theme:Button(header, "Responses", 88, 22)
+    header.filterButton = Theme:Button(header, "Filter", 64, 22)
     header.filterButton:SetPoint("RIGHT", header.scaleButton, "LEFT", -6, 0)
     bindDropDownButton(header.filterButton, filterMenu)
 
@@ -672,16 +625,8 @@ function wowauditEvaluationFrame:BuildColumnHeader(f)
         -- A small legend on the right of the wishes column. The swatches use the same
         -- colour keys as displayWish so they match the values shown in the column.
         if column.key == "wishes" then
-            local help = CreateFrame("Frame", nil, strip)
-            help:SetSize(COLUMN_HEADER_HEIGHT, COLUMN_HEADER_HEIGHT)
+            local help = Theme:WishColorHelp(strip, COLUMN_HEADER_HEIGHT)
             help:SetPoint("LEFT", strip, "LEFT", column.x + column.width - COLUMN_HEADER_HEIGHT, 0)
-
-            local glyph = Theme:Label(help, "?")
-            glyph:SetPoint("CENTER")
-
-            Theme:AttachTooltip(help)
-            help:SetTooltip("Wish colours", withColor("Best in slot", "b"),
-                withColor("Not best in slot", "n"), withColor("Outdated", "o"))
             strip.wishHelp = help
         end
     end
@@ -840,13 +785,17 @@ function wowauditEvaluationFrame:BuildRowData(entry, session)
 
             local priority = trinketPriorityToDisplay(entry.itemID, name)
 
-            local slotWishes = rankedSlotWishes(entry, sameSlot, wishes, value, priority)
+            local slotWishes = {}
+            local emptySlotMessage = wowauditEmptySlotMessage(name, wishes, sameSlot, entry.itemID,
+                itemTrack, {candidate.gear1, candidate.gear2})
+            if not emptySlotMessage then
+                slotWishes = wowauditRankedSlotWishes(entry, sameSlot, wishes, value, priority,
+                    Row.MAX_WISHES_IN_SLOT)
+            end
             local droppedRank = 999
-            for index, wish in ipairs(slotWishes) do
+            for _, wish in ipairs(slotWishes) do
                 if wish.isDropped then
-                    if wishes and #wishes > 0 then
-                        droppedRank = index
-                    end
+                    droppedRank = wish.rank or 999
                     break
                 end
             end
@@ -874,6 +823,7 @@ function wowauditEvaluationFrame:BuildRowData(entry, session)
                 bonusRollIcon = bonusRollIcon,
                 bonusLoot = bonusLoot,
                 slotWishes = slotWishes,
+                emptySlotMessage = emptySlotMessage,
                 profile = profile,
                 crestIcons = icons,
                 catalystIcon = catalyst and catalyst.icon,

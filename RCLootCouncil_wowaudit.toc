@@ -23,6 +23,7 @@ Utils\gear.lua
 Utils\popups.lua
 
 UI\theme.lua
+UI\slotWishes.lua
 UI\evaluationRow.lua
 
 Modules\gearProfile.lua

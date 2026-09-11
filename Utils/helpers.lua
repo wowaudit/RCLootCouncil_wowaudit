@@ -4,6 +4,37 @@ bonusRollTargets = bonusRollTargets or {}
 wishlistData = wishlistData or {}
 difficulties = difficulties or {}
 
+-- Manual picks (Huge/Big/Small/Tiny) always sort below numeric wishes, even
+-- when the number is small (0.71% vs Huge). Numeric wishes then compare among
+-- themselves in the active display (sim value or %).
+local WISH_LEVEL_RANK = {
+    huge = 4,
+    big = 3,
+    small = 2,
+    tiny = 1
+}
+
+local DEFAULT_WISH_LABELS = {
+    huge = "Huge",
+    big = "Big",
+    small = "Small",
+    tiny = "Tiny"
+}
+
+-- Website orb colours (bg-destructive / warning / success / muted-foreground).
+local WISH_LEVEL_COLORS = {
+    huge = "da3734",
+    big = "fa8900",
+    small = "238636",
+    tiny = "a1a1b6"
+}
+
+-- Theme.colors.warning, used when the drop is already covered.
+local WARNING_HEX = "f2bf33"
+local ALREADY_EQUIPPED_PREFIX = "Already equipped"
+
+local NUMERIC_SORT_BASE = 1000000000
+
 local difficultyOrder = {"R", "N", "H", "M"}
 
 local presentDifficulties = {}
@@ -23,6 +54,19 @@ wowauditRebuildPresentDifficulties()
 
 wowauditDataPresent = function()
     return wowauditTimestamp ~= nil
+end
+
+wowauditCharacterHasWishes = function(character)
+    local diffs = wishlistData and wishlistData[character]
+    if not diffs then
+        return false
+    end
+    for _, items in pairs(diffs) do
+        if type(items) == "table" and next(items) ~= nil then
+            return true
+        end
+    end
+    return false
 end
 
 wowauditDataToDisplay = function(itemID, itemString, character, difficultyOverride)
@@ -62,7 +106,7 @@ wowauditCharacterDataForDifficulty = function(itemId, character, difficulty, ini
             end
         else
             for _, item in ipairs(wishlistData[character][difficulty]) do
-                if item.id == itemId then
+                if tonumber(item.id) == tonumber(itemId) then
                     -- Copy so LENIENT tags do not leak onto the synced table and
                     -- then show up on later lookups for a different difficulty.
                     local tagged = {}
@@ -84,14 +128,59 @@ wowauditCharacterDataForDifficulty = function(itemId, character, difficulty, ini
     return wishes
 end
 
+local function wishLevelKey(raw)
+    if type(raw) ~= "string" or raw == "" then
+        return nil
+    end
+    local key = strlower(raw)
+    if WISH_LEVEL_RANK[key] then
+        return key
+    end
+    for canon, label in pairs(DEFAULT_WISH_LABELS) do
+        if label == raw or strlower(label) == key then
+            return canon
+        end
+    end
+    return nil
+end
+
+-- Custom percentages are stored as "14.0%"; Lua's tonumber stops at the %.
+wishNumericValue = function(raw)
+    if type(raw) == "number" then
+        return raw
+    end
+    if type(raw) ~= "string" then
+        return nil
+    end
+    return tonumber((string.gsub(raw, "%%", "")))
+end
+
+-- Sort key for one wish. Sim values and custom % share the numeric band so they
+-- compare in the active display (2345 vs 15.0% in value mode, 0.71 vs 15.0 in
+-- % mode). Labels live in a lower band: Huge > Big > Small > Tiny.
+wishSortValue = function(wish)
+    if not wish then
+        return 0
+    end
+    wish = transformWish(wish)
+    local raw = wowauditValueDisplay == "VALUE" and wish.value or wish.percent
+    local numeric = wishNumericValue(raw)
+    if numeric then
+        return NUMERIC_SORT_BASE + numeric
+    end
+    local level = wish.level or wishLevelKey(raw) or wishLevelKey(wish.value) or wishLevelKey(wish.percent)
+    if level and WISH_LEVEL_RANK[level] then
+        return WISH_LEVEL_RANK[level]
+    end
+    return 0
+end
+
 highestWishValue = function(wishes)
     local highest = 0
     if wishes then
-        for i, wish in ipairs(wishes) do
-            wish = transformWish(wish)
-            local value = tonumber(wowauditValueDisplay == "VALUE" and wish.value or wish.percent)
-
-            if value and value > highest then
+        for _, wish in ipairs(wishes) do
+            local value = wishSortValue(wish)
+            if value > highest then
                 highest = value
             end
         end
@@ -100,21 +189,150 @@ highestWishValue = function(wishes)
     return highest
 end
 
-displayWish = function(wish)
-    local displayValue
-    wish = transformWish(wish)
+wowauditIsAlreadyEquippedMessage = function(message)
+    return type(message) == "string" and message:sub(1, #ALREADY_EQUIPPED_PREFIX) == ALREADY_EQUIPPED_PREFIX
+end
 
-    if wowauditValueDisplay == "VALUE" then
-        displayValue = wish.value
-    else
-        if tonumber(wish.percent) then
-            displayValue = wish.percent .. "%"
-        else
-            displayValue = wish.percent
+-- Short reason the wishes column should show a message instead of a ranked list.
+wowauditEmptySlotMessage = function(name, wishes, sameSlot, itemID, droppedTrack, equippedLinks)
+    local equipped = wowauditAlreadyHasDroppedItem(itemID, droppedTrack, equippedLinks)
+    if equipped then
+        return ALREADY_EQUIPPED_PREFIX .. " (" .. equipped.track .. ")"
+    end
+    if not wowauditCharacterHasWishes(name) then
+        return "No wishlist data found"
+    end
+    if (not wishes or #wishes == 0) and #(sameSlot or {}) == 0 then
+        return "No wishes in this slot"
+    end
+end
+
+-- The dropped item and the character's other wishes for that slot, ranked
+-- together by wish value. Items with no wish (including a drop that is not
+-- on the list) still appear, but they sort last and do not get a rank number.
+wowauditRankedSlotWishes = function(entry, sameSlot, wishes, value, priority, maxCount)
+    maxCount = maxCount or 5
+
+    local bonus
+    for _, wish in ipairs(wishes or {}) do
+        bonus = wish.b or wish.bonus
+        if bonus then
+            break
         end
     end
 
-    return specIcon(wish.spec, 12) .. withColor(displayValue, wish.status)
+    local onWishlist = wishes and #wishes > 0
+    local ranked = {{
+        id = entry.itemID,
+        bonus = bonus,
+        wishes = wishes,
+        isDropped = true,
+        -- Dropped-item tooltip only when this character has no wish; otherwise
+        -- the chip uses the wish's bonus IDs.
+        link = (not onWishlist) and (entry.link or entry.string) or nil,
+        priority = priority
+    }}
+
+    for _, alternative in ipairs(sameSlot or {}) do
+        tinsert(ranked, alternative)
+    end
+
+    for _, item in ipairs(ranked) do
+        item.value = highestWishValue(item.wishes)
+        item.onWishlist = item.wishes and #item.wishes > 0
+    end
+
+    table.sort(ranked, function(a, b)
+        if a.onWishlist ~= b.onWishlist then
+            return a.onWishlist
+        end
+        if a.value == b.value then
+            if a.isDropped ~= b.isDropped then
+                return a.isDropped
+            end
+            return (tonumber(a.id) or 0) < (tonumber(b.id) or 0)
+        end
+        return a.value > b.value
+    end)
+
+    -- Trim extras from the bottom, never the dropped item, then leave it
+    -- where the value sort placed it.
+    while #ranked > maxCount do
+        local removed = false
+        for index = #ranked, 1, -1 do
+            if not ranked[index].isDropped then
+                table.remove(ranked, index)
+                removed = true
+                break
+            end
+        end
+        if not removed then
+            table.remove(ranked)
+        end
+    end
+
+    local rank = 0
+    for _, item in ipairs(ranked) do
+        if item.onWishlist then
+            rank = rank + 1
+            item.rank = rank
+        else
+            item.rank = nil
+        end
+    end
+
+    return ranked
+end
+
+-- Custom percentages are stored as "14.0%"; sim percents are numbers.
+-- Lua strings do not escape %, so a plain find must look for "%" not "%%".
+local function isManualPercent(wish)
+    local function hasPercent(raw)
+        return type(raw) == "string" and raw:find("%", 1, true)
+    end
+    if hasPercent(wish.percent) or hasPercent(wish.value) then
+        return true
+    end
+    -- Quoted numeric value (sim scores stay numbers). Labels are non-numeric strings.
+    return type(wish.value) == "string" and wishNumericValue(wish.value) and
+               not wishLevelKey(wish.value)
+end
+
+-- Huge/Big/Small/Tiny use the website orb colours. Manual % is always white.
+-- Numeric sim/% values keep BIS / not-BIS / outdated.
+wishDisplayColor = function(wish)
+    wish = transformWish(wish)
+    local level = wish.level or wishLevelKey(wish.value) or wishLevelKey(wish.percent)
+    if level and WISH_LEVEL_COLORS[level] then
+        return level
+    end
+    if isManualPercent(wish) then
+        return "m"
+    end
+    return wish.status
+end
+
+displayWish = function(wish)
+    wish = transformWish(wish)
+
+    local level = wish.level or wishLevelKey(wish.value) or wishLevelKey(wish.percent)
+    local displayValue
+    if level then
+        -- v already holds the team's custom name ("Huge" or "Blabla").
+        if type(wish.value) == "string" and not wishNumericValue(wish.value) then
+            displayValue = wish.value
+        else
+            displayValue = DEFAULT_WISH_LABELS[level] or wish.percent
+        end
+    elseif wowauditValueDisplay == "VALUE" then
+        displayValue = wish.value
+    elseif tonumber(wish.percent) then
+        displayValue = wish.percent .. "%"
+    else
+        displayValue = wish.percent
+    end
+
+    return specIcon(wish.spec, 12) .. withColor(displayValue, wishDisplayColor(wish))
 end
 
 transformWish = function(wish)
@@ -124,6 +342,12 @@ transformWish = function(wish)
     wish.percent = wish.p or wish.percent
     wish.comment = wish.c or wish.comment
     wish.bonus = wish.b or wish.bonus
+    local level = wish.l or wish.level
+    if type(level) == "string" then
+        wish.level = strlower(level)
+    else
+        wish.level = level
+    end
     return wish
 end
 
@@ -168,10 +392,22 @@ end
 textColors = {
     b = "DIM_GREEN_FONT_COLOR", -- BIS
     n = "YELLOW_THREAT_COLOR", -- not BIS
-    o = "DRAGONFLIGHT_RED_COLOR" -- outdated
+    o = "DRAGONFLIGHT_RED_COLOR", -- outdated
+    m = "WHITE_FONT_COLOR" -- manual %
 }
 
+wowauditWishColorLegend = function()
+    return "Wish colours",
+        withColor("Manual", "m"),
+        withColor("Best in slot", "b"),
+        withColor("Not best in slot", "n"), withColor("Outdated", "o")
+end
+
 withColor = function(text, colorKey)
+    local hex = WISH_LEVEL_COLORS[colorKey] or (colorKey == "w" and WARNING_HEX)
+    if hex then
+        return "|cff" .. hex .. (text or "error") .. "|r"
+    end
     local color = textColors[colorKey]
     if not color then
         return text or ""
