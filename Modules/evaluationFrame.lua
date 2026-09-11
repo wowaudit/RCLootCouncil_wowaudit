@@ -202,7 +202,9 @@ local function rankedSlotWishes(entry, sameSlot, wishes, value, priority)
         value = value,
         priority = priority,
         isDropped = true,
-        link = entry.link or entry.string
+        -- Dropped-item tooltip only when this character has no wish; otherwise
+        -- the chip uses the wish's bonus IDs.
+        link = (not wishes or #wishes == 0) and (entry.link or entry.string) or nil
     }}
 
     for _, alternative in ipairs(sameSlot) do
@@ -486,6 +488,52 @@ function wowauditEvaluationFrame:BuildResizeGrip(f)
     f.resizeGrip = grip
 end
 
+-- GLOBAL_MOUSE_DOWN closes MSA menus before our button sees the click, so Toggle
+-- would reopen the same menu. Remember which menu that close hid, skip the
+-- reopen, and drop the flag after this mouse-up so a later click can open again.
+local closedDropDown
+local dropDownCloseHooked
+
+local function rememberClosedDropDown()
+    local list = _G.MSA_DropDownList1
+    if list and list:IsShown() then
+        closedDropDown = MSA_DROPDOWNMENU_OPEN_MENU
+    end
+end
+
+local function hookDropDownClose()
+    if dropDownCloseHooked or not MSA_CloseDropDownMenus then
+        return
+    end
+    dropDownCloseHooked = true
+
+    local orig = MSA_CloseDropDownMenus
+    MSA_CloseDropDownMenus = function(...)
+        rememberClosedDropDown()
+        return orig(...)
+    end
+
+    local clearer = CreateFrame("Frame")
+    clearer:RegisterEvent("GLOBAL_MOUSE_UP")
+    clearer:SetScript("OnEvent", function()
+        C_Timer.After(0, function()
+            closedDropDown = nil
+        end)
+    end)
+end
+
+local function bindDropDownButton(button, menu)
+    hookDropDownClose()
+    button:SetScript("OnClick", function(self)
+        local closed = closedDropDown
+        closedDropDown = nil
+        if closed == menu then
+            return
+        end
+        MSA_ToggleDropDownMenu(1, nil, menu, self, 0, 0)
+    end)
+end
+
 function wowauditEvaluationFrame:BuildHeader(f)
     local header = CreateFrame("Frame", nil, f)
     header:SetHeight(HEADER_HEIGHT)
@@ -540,7 +588,6 @@ function wowauditEvaluationFrame:BuildHeader(f)
     -- Same pairing as the equipped column: track badge, then ilvl.
     header.track = Theme:Pill(header, 18)
     header.track:SetPoint("LEFT", header.itemName, "RIGHT", 8, 0)
-    Theme:AttachTooltip(header.track)
 
     header.ilvl = Theme:Value(header, 15, true)
     header.ilvl:SetPoint("LEFT", header.track, "RIGHT", 8, 0)
@@ -571,17 +618,11 @@ function wowauditEvaluationFrame:BuildHeader(f)
 
     header.filterButton = Theme:Button(header, "Responses", 88, 22)
     header.filterButton:SetPoint("RIGHT", header.scaleButton, "LEFT", -6, 0)
-    -- MSA_ToggleDropDownMenu is a real toggle, so a second click closes the menu
-    -- instead of closing and immediately reopening it.
-    header.filterButton:SetScript("OnClick", function(button)
-        MSA_ToggleDropDownMenu(1, nil, filterMenu, button, 0, 0)
-    end)
+    bindDropDownButton(header.filterButton, filterMenu)
 
     header.sortButton = Theme:Button(header, "Sort", 110, 22)
     header.sortButton:SetPoint("RIGHT", header.filterButton, "LEFT", -6, 0)
-    header.sortButton:SetScript("OnClick", function(button)
-        MSA_ToggleDropDownMenu(1, nil, sortMenu, button, 0, 0)
-    end)
+    bindDropDownButton(header.sortButton, sortMenu)
 
     header.valueButton = Theme:Button(header, "Show %", 84, 22)
     header.valueButton:SetPoint("RIGHT", header.sortButton, "LEFT", -6, 0)
@@ -597,9 +638,7 @@ function wowauditEvaluationFrame:BuildHeader(f)
 
     header.difficultyButton = Theme:Button(header, "Wishes: Heroic", 124, 22)
     header.difficultyButton:SetPoint("RIGHT", header.valueButton, "LEFT", -6, 0)
-    header.difficultyButton:SetScript("OnClick", function(button)
-        MSA_ToggleDropDownMenu(1, nil, difficultyMenu, button, 0, 0)
-    end)
+    bindDropDownButton(header.difficultyButton, difficultyMenu)
 
     f.header = header
 end
@@ -787,9 +826,9 @@ function wowauditEvaluationFrame:BuildRowData(entry, session)
             requestTrackItems(profile, itemTrack and itemTrack.track)
             for _, gear in ipairs({candidate.gear1, candidate.gear2}) do
                 local equippedTrack = gear and wowauditTrackForItem(gear, true)
-                if equippedTrack then
-                    requestTrackItems(profile, equippedTrack.track)
-                end
+                local crafted = not equippedTrack and gear and wowauditCraftedInfoForItem(gear)
+                requestTrackItems(profile, equippedTrack and equippedTrack.track or
+                    (crafted and crafted.track))
             end
 
             if profile then
@@ -970,7 +1009,6 @@ function wowauditEvaluationFrame:RefreshHeader(entry)
         header.itemName:SetTextColor(Theme:Color("value"))
         header.track:Hide()
         header.track:SetWidth(0.01)
-        header.track:SetTooltip()
         header.ilvl:SetText("")
         header.bonuses:SetText("")
         return
@@ -992,12 +1030,9 @@ function wowauditEvaluationFrame:RefreshHeader(entry)
 
     if track then
         header.track:Set(wowauditTrackLabel(track), wowauditTrackColor(track.track))
-        header.track:SetTooltip(wowauditTrackLabel(track),
-            wowauditStepsLeft(track) .. " upgrades left on this item")
     else
         header.track:Hide()
         header.track:SetWidth(0.01)
-        header.track:SetTooltip()
     end
 
     local ilvl = C_Item.GetDetailedItemLevelInfo(entry.link or entry.string) or entry.ilvl

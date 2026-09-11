@@ -63,3 +63,12 @@ wowauditCatalystCurrencyID = 3465
 
 -- Bonus roll coins, the same currency the /rc coins window reports on.
 wowauditBonusRollCurrencyID = 3418
+
+-- Spark crafts. Identified by the season spark bonus ID; the crest track is
+-- the item level, not an upgrade-track bonus ID.
+wowauditSparkBonusId = 13751
+wowauditCraftedTrackCutoffs = {
+    {ilvl = 321, track = "Myth"},
+    {ilvl = 308, track = "Hero"},
+    {ilvl = 0, track = "Champion"}
+}

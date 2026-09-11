@@ -207,7 +207,7 @@ function wowauditWishFrame:GetFrame()
     local st = ST:CreateST(self.scrollCols, 25, ROW_HEIGHT, nil, f.content)
     st.frame:SetPoint("TOPLEFT", f, "TOPLEFT", 10, -35)
     f:SetWidth(st.frame:GetWidth() + 20)
-    f:SetHeight(wowauditIsSource and 605 or 585)
+    f:SetHeight(605)
     f.st = st
 
     local closeButton = addon:CreateButton("Close", f.content)
@@ -217,12 +217,17 @@ function wowauditWishFrame:GetFrame()
     end)
     f.closeButton = closeButton
 
-    local broadcastButton = addon:CreateButton("Share data", f.content)
-    broadcastButton:SetPoint("RIGHT", closeButton, "LEFT", -10, 0)
-    broadcastButton:SetScript("OnClick", function()
-        RCwowaudit:GetModule("wowauditShareData"):BroadcastNow()
+    local actionButton = addon:CreateButton(wowauditIsSource and "Share data" or "Request data", f.content)
+    actionButton:SetPoint("RIGHT", closeButton, "LEFT", -10, 0)
+    actionButton:SetScript("OnClick", function()
+        local share = RCwowaudit:GetModule("wowauditShareData")
+        if wowauditIsSource then
+            share:BroadcastNow()
+        else
+            share:RequestNow()
+        end
     end)
-    f.broadcastButton = broadcastButton
+    f.actionButton = actionButton
 
     local infoText = f.content:CreateFontString(nil, "OVERLAY", "GameFontNormal")
     infoText:SetPoint("BOTTOMLEFT", f, "BOTTOMLEFT", 15, 15)
@@ -283,16 +288,13 @@ function wowauditWishFrame:UpdateShareStatus()
 
     local share = RCwowaudit:GetModule("wowauditShareData", true)
     local view = share and share:ShareStatusView()
-    if f.broadcastButton then
-        if view then
-            f.broadcastButton:Show()
-            if view.inProgress then
-                f.broadcastButton:Disable()
-            else
-                f.broadcastButton:Enable()
-            end
+    if f.actionButton then
+        f.actionButton:Show()
+        f.actionButton:SetText(wowauditIsSource and "Share data" or "Request data")
+        if view and view.inProgress then
+            f.actionButton:Disable()
         else
-            f.broadcastButton:Hide()
+            f.actionButton:Enable()
         end
     end
     if not view then

@@ -191,21 +191,20 @@ local function trackUpgradesTooltipLines(equipped)
     return current, possible, lines
 end
 
--- Same numbers the crests column draws, for a given track. The column itself is
--- always the dropped item's track; equipped badges pass theirs instead.
-local function equippedTrackTooltip(track, profile, crestIcon)
-    local lines = {
-        wowauditTrackLabel(track),
-        wowauditStepsLeft(track) .. " upgrades left on this item"
-    }
-
-    if not profile then
-        return lines
+-- Crests held for a track that the crests column is not already showing. The
+-- column is always the dropped item's track, so equipped badges only need this
+-- when they sit on a different one.
+local function otherTrackCrestsTooltip(trackName, profile, crestIcon)
+    if not trackName or not profile then
+        return nil
     end
 
-    local trackName = track.track
+    local lines = {trackName .. " crests"}
+    local hasBody = false
+
     local crest = profile.cr and profile.cr[trackName]
     if crest then
+        hasBody = true
         local held = tostring(crest.q or 0)
         if crestIcon then
             held = "|T" .. crestIcon .. ":14:14:0:0:64:64:4:60:4:60|t " .. held
@@ -217,17 +216,80 @@ local function equippedTrackTooltip(track, profile, crestIcon)
         end
     end
 
-    local current, possible, upgradeLines = trackUpgradesTooltipLines(profile.eq and profile.eq[trackName])
+    local equipped = profile.eq and profile.eq[trackName]
+    local current, possible = trackStepTotals(equipped)
     if possible > 0 then
+        hasBody = true
         tinsert(lines, current .. " |cff6b6f7a/|r " .. possible .. " upgraded")
-        if upgradeLines then
-            for _, line in ipairs(upgradeLines) do
-                tinsert(lines, line)
-            end
+        local itemsLine = trackItemsTooltipLine(equipped and equipped.i)
+        if itemsLine then
+            tinsert(lines, itemsLine)
         end
     end
 
+    if not hasBody then
+        return nil
+    end
     return lines
+end
+
+local function layoutEquippedLine(line, stacked)
+    line.chip:ClearAllPoints()
+    line.ilvl:ClearAllPoints()
+    line.track:ClearAllPoints()
+
+    if stacked then
+        line:SetHeight(LINE_HEIGHT * 2)
+        line.chip:SetPoint("TOPLEFT")
+        line.chip:SetPoint("TOPRIGHT")
+        line.track:SetPoint("TOPLEFT", line.chip, "BOTTOMLEFT")
+        line.ilvl:SetJustifyH("LEFT")
+        line.ilvl:SetPoint("LEFT", line.track, "RIGHT", 6, 0)
+    else
+        line:SetHeight(LINE_HEIGHT)
+        line.ilvl:SetPoint("RIGHT", -10, 0)
+        line.ilvl:SetWidth(26)
+        line.ilvl:SetJustifyH("RIGHT")
+        line.track:SetPoint("RIGHT", line.ilvl, "LEFT", -6, 0)
+        line.chip:SetPoint("LEFT")
+        line.chip:SetPoint("RIGHT", line.track, "LEFT", -4, 0)
+    end
+end
+
+local function setEquippedTrackTooltip(line, trackName, data)
+    local dropped = data.itemTrack and data.itemTrack.track
+    if not trackName or trackName == dropped then
+        line.track:SetTooltip()
+        return
+    end
+
+    local lines = otherTrackCrestsTooltip(trackName, data.profile,
+        data.crestIcons and data.crestIcons[trackName])
+    if lines then
+        line.track:SetTooltip(unpack(lines))
+    else
+        line.track:SetTooltip()
+    end
+end
+
+local function setEquippedTrack(line, item, data)
+    local track = wowauditTrackForItem(item, true)
+    if track then
+        line.track:Set(wowauditTrackLabel(track), wowauditTrackColor(track.track))
+        setEquippedTrackTooltip(line, track.track, data)
+        return
+    end
+
+    local crafted = wowauditCraftedInfoForItem(item)
+    if crafted then
+        line.track:Set("Crafted", wowauditTrackColor(crafted.track))
+        setEquippedTrackTooltip(line, crafted.track, data)
+        return
+    end
+
+    line.track:Hide()
+    line.track:SetWidth(0.01)
+    line.track:SetTooltip()
 end
 
 function Row:Create(parent)
@@ -321,7 +383,8 @@ function Row:BuildPlayerBlock(row)
 end
 
 -- Trinkets and rings mean two equipped items compete with the drop, and
--- RCLootCouncil sends both.
+-- RCLootCouncil sends both. A single item uses both lines: name on the first,
+-- track then ilvl on the second.
 function Row:BuildEquippedBlock(row)
     local x, width = columnX("equipped")
 
@@ -331,9 +394,6 @@ function Row:BuildEquippedBlock(row)
         line:SetSize(width, LINE_HEIGHT)
         line:SetPoint("TOPLEFT", x, lineY(index))
 
-        -- Item level is always present and pinned to the right so the numbers
-        -- line up down the column. The track badge sits to its left and collapses
-        -- when the item has no track.
         line.ilvl = Theme:Value(line, 12)
         line.ilvl:SetPoint("RIGHT", -10, 0)
         line.ilvl:SetWidth(26)
@@ -451,8 +511,8 @@ end
 function Row:BuildAwardBlock(row)
     local x, width = columnX("award")
 
-    row.awardButton = Theme:Button(row, "Award", width - 8, 22)
-    row.awardButton:SetPoint("TOPLEFT", x, lineY(1) + 2)
+    row.awardButton = Theme:Button(row, "Award", width - 8, 16)
+    row.awardButton:SetPoint("TOPLEFT", x, lineY(1))
     keepRowLit(row, row.awardButton)
     row.awardButton:SetScript("OnClick", function()
         local name = row.data and row.data.name
@@ -462,13 +522,8 @@ function Row:BuildAwardBlock(row)
         end
     end)
 
-    row.awardedPill = Theme:Pill(row, 18)
+    row.awardedPill = Theme:Pill(row, 16)
     row.awardedPill:SetPoint("TOPLEFT", x, lineY(1))
-
-    row.responseEcho = Theme:Value(row, 11)
-    row.responseEcho:SetPoint("TOPLEFT", x, lineY(2) + 1)
-    row.responseEcho:SetWidth(width - 8)
-    row.responseEcho:SetWordWrap(false)
 end
 
 function Row:SetData(row, data, index)
@@ -566,6 +621,7 @@ end
 
 function Row:SetEquippedData(row, data)
     local gear = {data.gear1, data.gear2}
+    local stacked = data.gear1 and not data.gear2
 
     for index, line in ipairs(row.equipped) do
         local item = gear[index]
@@ -573,31 +629,26 @@ function Row:SetEquippedData(row, data)
         if not item then
             line:Hide()
         else
+            layoutEquippedLine(line, stacked and index == 1)
             line.chip:SetItem(item)
             line.ilvl:SetText(C_Item.GetDetailedItemLevelInfo(item) or "")
-
-            local track = wowauditTrackForItem(item, true)
-            if track then
-                line.track:Set(wowauditTrackLabel(track), wowauditTrackColor(track.track))
-                line.track:SetTooltip(unpack(equippedTrackTooltip(track, data.profile,
-                    data.crestIcons and data.crestIcons[track.track])))
-            else
-                -- Collapse rather than just hide, so the name chip anchored to its
-                -- left still reaches the ilvl on the right edge.
-                line.track:Hide()
-                line.track:SetWidth(0.01)
+            if stacked then
+                line.ilvl:SetWidth(math.max(1, line.ilvl:GetStringWidth()))
             end
-
+            setEquippedTrack(line, item, data)
             line:Show()
         end
     end
 
     if not data.gear1 then
-        row.equipped[1].chip:SetItem(nil, "Nothing equipped")
-        row.equipped[1].ilvl:SetText("")
-        row.equipped[1].track:Hide()
-        row.equipped[1].track:SetWidth(0.01)
-        row.equipped[1]:Show()
+        local line = row.equipped[1]
+        layoutEquippedLine(line, true)
+        line.chip:SetItem(nil, "Nothing equipped")
+        line.ilvl:SetText("")
+        line.track:Hide()
+        line.track:SetWidth(0.01)
+        line.track:SetTooltip()
+        line:Show()
     end
 end
 
@@ -613,6 +664,17 @@ function Row:SetWishesData(row, data)
             local link = wish.link or wowauditWishItemLink(wish.id, wish.bonus)
             line.chip:SetItem(link)
             line.chip:SetMuted(not wish.isDropped)
+            if wish.isDropped then
+                line.rank:SetFont(Theme:Font(12))
+                line.rank:SetTextColor(Theme:Color("value"))
+                line.value:SetFont(Theme:Font(12))
+                line.value:SetAlpha(1)
+            else
+                line.rank:SetFont(Theme:Font(11))
+                line.rank:SetTextColor(Theme:Color("dim"))
+                line.value:SetFont(Theme:Font(11))
+                line.value:SetAlpha(0.55)
+            end
             line.rank:SetText(index .. ".")
 
             local text = specWishesText(wish.wishes)
@@ -630,7 +692,7 @@ function Row:SetWishesData(row, data)
             if diff then
                 text = text .. " |cff6b6f7a(" .. diff .. ")|r"
             end
-            if wish.isDropped and data.bonusRollTarget then
+            if wish.id and wowauditBonusRollTargetForItem(wish.id, data.name) then
                 text = diceIcon .. " " .. text
             end
 
@@ -769,13 +831,5 @@ function Row:SetAwardData(row, data)
     else
         row.awardedPill:Hide()
         row.awardButton:Show()
-    end
-
-    if data.responseText then
-        row.responseEcho:SetText(data.responseText)
-        row.responseEcho:SetTextColor(unpack(data.responseColor or {1, 1, 1}))
-        row.responseEcho:Show()
-    else
-        row.responseEcho:Hide()
     end
 end

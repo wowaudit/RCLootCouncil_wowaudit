@@ -230,6 +230,73 @@ wowauditTrackColor = function(trackName)
     return color.r, color.g, color.b
 end
 
+local function itemStringFromLink(itemStringOrLink)
+    local raw = tostring(itemStringOrLink)
+    local itemString = string.match(raw, "item:[%d:%-]+")
+    if itemString then
+        return itemString
+    end
+    if string.match(raw, "^%d") then
+        return "item:" .. raw
+    end
+end
+
+local function bonusIdsFromItem(itemStringOrLink)
+    local itemString = itemStringFromLink(itemStringOrLink)
+    if not itemString then
+        return {}
+    end
+
+    local ids = {}
+    local position = 0
+    local remaining
+    for field in (itemString .. ":"):gmatch("(.-):") do
+        position = position + 1
+        if position == FIRST_BONUS_ID_FIELD then
+            remaining = tonumber(field) or 0
+        elseif remaining and remaining > 0 and position > FIRST_BONUS_ID_FIELD then
+            local id = tonumber(field)
+            if id then
+                tinsert(ids, id)
+            end
+            remaining = remaining - 1
+        end
+    end
+    return ids
+end
+
+local function craftedTrackFromIlvl(ilvl)
+    if not ilvl then
+        return "Champion"
+    end
+    for _, cutoff in ipairs(wowauditCraftedTrackCutoffs or {}) do
+        if ilvl >= cutoff.ilvl then
+            return cutoff.track
+        end
+    end
+    return "Champion"
+end
+
+wowauditCraftedInfoForItem = function(itemStringOrLink)
+    if not itemStringOrLink or not wowauditSparkBonusId then
+        return nil
+    end
+
+    local crafted
+    for _, id in ipairs(bonusIdsFromItem(itemStringOrLink)) do
+        if id == wowauditSparkBonusId then
+            crafted = true
+            break
+        end
+    end
+    if not crafted then
+        return nil
+    end
+
+    local ilvl = C_Item.GetDetailedItemLevelInfo(itemStringOrLink)
+    return {track = craftedTrackFromIlvl(ilvl)}
+end
+
 -- How many upgrade steps the item still has left on its own track.
 wowauditStepsLeft = function(track)
     if not track then

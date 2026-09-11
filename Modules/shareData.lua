@@ -21,14 +21,23 @@ wowauditIsSource = wowauditTimestamp ~= nil
 
 local GROUP_SYNC_DELAY = 2
 local REQUEST_THROTTLE = 10
-local REPLY_JITTER_MIN = 0.3
-local REPLY_JITTER_MAX = 1.8
+local REPLY_DEBOUNCE = 10
+local ACK_WAIT = 4
+local RECEIVE_WAIT = 45
 local STALE_AFTER = 7 * 24 * 60 * 60
 
 local wasInGroup = false
 local lastRequestAt = 0
 local pushedTimestamp
 local suppressPush = false
+local pendingAfterSend = false
+local sendFullData
+local inbound = {
+    awaitingAcks = false,
+    willReceive = false,
+    gotAck = false,
+    result = nil
+}
 local broadcast = {
     inProgress = false,
     sent = 0,
@@ -61,6 +70,12 @@ local function onSendProgress(_, sent, total)
         end
         broadcast.startedAt = nil
         persistBroadcast()
+        notifyShareUI()
+        if pendingAfterSend then
+            pendingAfterSend = false
+            sendFullData()
+        end
+        return
     end
     notifyShareUI()
 end
@@ -71,7 +86,60 @@ end
 
 function wowauditShareData:ShareStatusView()
     if not wowauditIsSource then
-        return nil
+        if inbound.awaitingAcks and not inbound.willReceive then
+            return {
+                inProgress = true,
+                text = "Waiting for a source…",
+                sent = 0,
+                total = 1
+            }
+        end
+        if inbound.willReceive then
+            return {
+                inProgress = true,
+                text = "Receiving wishlist data…",
+                sent = 1,
+                total = 1
+            }
+        end
+        if inbound.result == "current" then
+            return {
+                inProgress = false,
+                text = "Already up to date",
+                sent = 0,
+                total = 1
+            }
+        end
+        if inbound.result == "nobody" then
+            return {
+                inProgress = false,
+                text = "No one in the group can share data",
+                sent = 0,
+                total = 1
+            }
+        end
+        if inbound.result == "updated" then
+            return {
+                inProgress = false,
+                text = "Updated " .. date("%H:%M"),
+                sent = 0,
+                total = 1
+            }
+        end
+        if inbound.result == "missing" then
+            return {
+                inProgress = false,
+                text = "Share didn't arrive. Try again.",
+                sent = 0,
+                total = 1
+            }
+        end
+        return {
+            inProgress = false,
+            text = "Not requested this session",
+            sent = 0,
+            total = 1
+        }
     end
     if broadcast.inProgress then
         local total = broadcast.total or 0
@@ -86,6 +154,14 @@ function wowauditShareData:ShareStatusView()
             text = text,
             sent = sent,
             total = math.max(total, 1)
+        }
+    end
+    if self.replyTimer then
+        return {
+            inProgress = false,
+            text = "Share queued, waiting for more people…",
+            sent = 0,
+            total = 1
         }
     end
     if broadcast.lastCompletedAt then
@@ -113,12 +189,6 @@ local function isSelf(sender)
     return sender and addon:UnitIsUnit(sender, "player")
 end
 
-local function datasetStore()
-    local db = addon:Getdb()
-    db.wowauditSharedDataset = db.wowauditSharedDataset or {}
-    return db
-end
-
 local function currentPayload()
     return {
         wishlistData = wishlistData or {},
@@ -130,15 +200,34 @@ local function currentPayload()
     }
 end
 
+-- One snapshot. A later group with another team sends a fresh dump.
+local function cachedPayload(db)
+    local cache = db.wowauditSharedDataset
+    if type(cache) ~= "table" then
+        return nil
+    end
+    if cache.timestamp then
+        return cache
+    end
+    -- Older builds keyed this by team.
+    local entry = db.wowauditActiveTeam and cache[db.wowauditActiveTeam]
+    if type(entry) == "table" and entry.timestamp then
+        return entry
+    end
+    local best
+    for _, data in pairs(cache) do
+        if type(data) == "table" and data.timestamp and (not best or data.timestamp > best.timestamp) then
+            best = data
+        end
+    end
+    return best
+end
+
 local function persistDataset()
     if not wowauditTimestamp then
         return
     end
-
-    local db = datasetStore()
-    local key = teamKey(teamID)
-    db.wowauditSharedDataset[key] = currentPayload()
-    db.wowauditActiveTeam = key
+    addon:Getdb().wowauditSharedDataset = currentPayload()
 end
 
 local function applyDataset(payload, fromCache)
@@ -147,10 +236,12 @@ local function applyDataset(payload, fromCache)
     end
 
     local payloadTeam = payload.teamID or 0
-    local currentTeam = teamID or 0
-    local differentTeam = teamKey(payloadTeam) ~= teamKey(currentTeam)
+    local differentTeam = teamKey(payloadTeam) ~= teamKey(teamID)
     local newer = not wowauditTimestamp or payload.timestamp > wowauditTimestamp
 
+    if wowauditIsSource and differentTeam then
+        return false
+    end
     if not differentTeam and not newer then
         return false
     end
@@ -167,8 +258,6 @@ local function applyDataset(payload, fromCache)
 
     if not fromCache then
         persistDataset()
-    else
-        datasetStore().wowauditActiveTeam = teamKey(teamID)
     end
 
     RCwowaudit:RefreshEvaluationFrame()
@@ -180,45 +269,28 @@ local function applyDataset(payload, fromCache)
 end
 
 local function hydrateFromCache()
-    local db = datasetStore()
-    local cache = db.wowauditSharedDataset
-    if type(cache) ~= "table" then
-        return
-    end
-
-    -- Sources only overlay same-team cache (newer leftover-stale db.lua).
-    -- Switching teams is a raid-time adoption, not an init-time one.
-    if wowauditIsSource then
-        local entry = cache[teamKey(teamID)]
-        if entry then
-            applyDataset(entry, true)
-        end
-        return
-    end
-
-    local entry = db.wowauditActiveTeam and cache[db.wowauditActiveTeam]
+    local entry = cachedPayload(addon:Getdb())
     if not entry then
-        local bestTimestamp
-        for _, data in pairs(cache) do
-            if data and data.timestamp and (not bestTimestamp or data.timestamp > bestTimestamp) then
-                bestTimestamp = data.timestamp
-                entry = data
-            end
-        end
+        return
     end
-
-    if entry then
-        applyDataset(entry, true)
+    if wowauditIsSource and teamKey(entry.teamID) ~= teamKey(teamID) then
+        return
     end
+    applyDataset(entry, true)
 end
 
 -- RCLootCouncil's Comms sender already serialises, compresses (LibDeflate) and
 -- chunks. The full dataset is one table; ChatThrottleLib rate-limits the rest.
-local function sendFullData()
+sendFullData = function()
     if not wowauditIsSource or not wowauditTimestamp then
         return
     end
+    if broadcast.inProgress then
+        pendingAfterSend = true
+        return
+    end
 
+    pendingAfterSend = false
     pushedTimestamp = wowauditTimestamp
     broadcast.inProgress = true
     broadcast.sent = 0
@@ -256,6 +328,7 @@ function wowauditShareData:CancelPendingSend()
     if self.replyTimer then
         self:CancelTimer(self.replyTimer)
         self.replyTimer = nil
+        notifyShareUI()
     end
 end
 
@@ -267,30 +340,82 @@ function wowauditShareData:AnnounceVersion()
 end
 
 function wowauditShareData:ScheduleReply()
+    pendingAfterSend = false
     if self.replyTimer then
-        return
+        self:CancelTimer(self.replyTimer)
     end
 
-    local delay = REPLY_JITTER_MIN + math.random() * (REPLY_JITTER_MAX - REPLY_JITTER_MIN)
     self.replyTimer = self:ScheduleTimer(function()
         wowauditShareData.replyTimer = nil
         if suppressPush then
+            notifyShareUI()
             return
         end
         sendFullData()
-    end, delay)
+    end, REPLY_DEBOUNCE)
+    notifyShareUI()
 end
 
-function wowauditShareData:RequestDataset()
+function wowauditShareData:RequestDataset(force)
     if not IsInGroup() then
         return
     end
-    if GetTime() - lastRequestAt < REQUEST_THROTTLE then
+    if not force and GetTime() - lastRequestAt < REQUEST_THROTTLE then
         return
     end
 
     lastRequestAt = GetTime()
-    RCwowaudit:Send("group", "request_data", wowauditTimestamp, teamID or 0)
+    RCwowaudit:Send("group", "request_data", wowauditTimestamp, teamID or 0, wowauditIsSource)
+end
+
+function wowauditShareData:CancelInboundWait()
+    if self.ackTimer then
+        self:CancelTimer(self.ackTimer)
+        self.ackTimer = nil
+    end
+    if self.receiveTimer then
+        self:CancelTimer(self.receiveTimer)
+        self.receiveTimer = nil
+    end
+end
+
+function wowauditShareData:FinishInbound(result)
+    inbound.awaitingAcks = false
+    inbound.willReceive = false
+    inbound.result = result
+    self:CancelInboundWait()
+    notifyShareUI()
+end
+
+function wowauditShareData:RequestNow()
+    if wowauditIsSource then
+        return
+    end
+    if not IsInGroup() then
+        addon:Print("Join a group to request wishlist data.")
+        return
+    end
+    if inbound.awaitingAcks or inbound.willReceive then
+        return
+    end
+
+    inbound.awaitingAcks = true
+    inbound.willReceive = false
+    inbound.gotAck = false
+    inbound.result = nil
+    self:CancelInboundWait()
+    notifyShareUI()
+    self:RequestDataset(true)
+
+    self.ackTimer = self:ScheduleTimer(function()
+        wowauditShareData.ackTimer = nil
+        inbound.awaitingAcks = false
+        if inbound.willReceive then
+            notifyShareUI()
+            return
+        end
+        wowauditShareData:FinishInbound(inbound.gotAck and "current" or "nobody")
+    end, ACK_WAIT)
 end
 
 function wowauditShareData:ScheduleGroupSync()
@@ -305,12 +430,11 @@ function wowauditShareData:ScheduleGroupSync()
         end
 
         suppressPush = false
-        -- Sources advertise a timestamp only. The full payload is sent later, and
-        -- only if someone answers that theirs is older.
         if wowauditIsSource then
             wowauditShareData:AnnounceVersion()
+        else
+            wowauditShareData:RequestDataset()
         end
-        wowauditShareData:RequestDataset()
     end, GROUP_SYNC_DELAY)
 end
 
@@ -319,17 +443,17 @@ function wowauditShareData:IsStaleVs(theirTimestamp, theirTeam)
         return false
     end
     if teamKey(theirTeam) ~= teamKey(teamID) then
-        return true
+        return not wowauditIsSource
     end
     return not wowauditTimestamp or theirTimestamp > wowauditTimestamp
 end
 
-function wowauditShareData:ShouldReply(theirTimestamp, theirTeam)
+function wowauditShareData:ShouldReply(theirTimestamp, theirTeam, theyAreSource)
     if not wowauditIsSource or not wowauditTimestamp then
         return false
     end
     if teamKey(theirTeam) ~= teamKey(teamID) then
-        return true
+        return not theyAreSource
     end
     return wowauditTimestamp > (theirTimestamp or 0)
 end
@@ -344,14 +468,47 @@ function wowauditShareData:OnDataVersionReceived(sender, theirTimestamp, theirTe
     self:RequestDataset()
 end
 
-function wowauditShareData:OnRequestDataReceived(sender, theirTimestamp, theirTeam)
+function wowauditShareData:OnRequestDataReceived(sender, theirTimestamp, theirTeam, theyAreSource)
     if isSelf(sender) then
         return
     end
-    if not self:ShouldReply(theirTimestamp, theirTeam) then
+    if not wowauditIsSource or not wowauditTimestamp then
         return
     end
-    self:ScheduleReply()
+
+    local willSend = self:ShouldReply(theirTimestamp, theirTeam, theyAreSource)
+    RCwowaudit:Send("group", "data_ack", sender, willSend and "pending" or "current")
+    if willSend then
+        self:ScheduleReply()
+    end
+end
+
+function wowauditShareData:OnDataAckReceived(sender, forWhom, status)
+    if isSelf(sender) or not forWhom then
+        return
+    end
+    if not addon:UnitIsUnit(forWhom, "player") then
+        return
+    end
+    if not inbound.awaitingAcks and not inbound.willReceive then
+        return
+    end
+
+    inbound.gotAck = true
+    if status ~= "pending" then
+        return
+    end
+
+    inbound.willReceive = true
+    if not self.receiveTimer then
+        self.receiveTimer = self:ScheduleTimer(function()
+            wowauditShareData.receiveTimer = nil
+            if inbound.willReceive then
+                wowauditShareData:FinishInbound("missing")
+            end
+        end, RECEIVE_WAIT)
+    end
+    notifyShareUI()
 end
 
 function wowauditShareData:OnFullDataReceived(sender, payload)
@@ -373,6 +530,10 @@ function wowauditShareData:OnFullDataReceived(sender, payload)
     if adopted or (sameTeam and equalOrNewer) then
         suppressPush = true
         self:CancelPendingSend()
+    end
+
+    if inbound.awaitingAcks or inbound.willReceive then
+        self:FinishInbound(adopted and "updated" or "current")
     end
 end
 
@@ -402,8 +563,8 @@ function wowauditShareData:OnInitialize()
         broadcast.lastCompletedAt = db.wowauditLastShareAt
         broadcast.lastDuration = db.wowauditLastShareDuration
         if wowauditIsSource and wowauditTimestamp then
-            local cached = datasetStore().wowauditSharedDataset[teamKey(teamID)]
-            if not cached or (cached.timestamp or 0) < wowauditTimestamp then
+            local cached = cachedPayload(db)
+            if not cached or teamKey(cached.teamID) ~= teamKey(teamID) or (cached.timestamp or 0) < wowauditTimestamp then
                 persistDataset()
             end
         end
@@ -424,6 +585,9 @@ function wowauditShareData:OnInitialize()
         end,
         request_data = function(data, sender)
             self:OnRequestDataReceived(sender, unpack(data))
+        end,
+        data_ack = function(data, sender)
+            self:OnDataAckReceived(sender, unpack(data))
         end,
         full_data = function(data, sender)
             self:OnFullDataReceived(sender, unpack(data))
