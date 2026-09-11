@@ -230,8 +230,29 @@ local function persistDataset()
     addon:Getdb().wowauditSharedDataset = currentPayload()
 end
 
+-- Read from AceDB when it is ready: this can run before RCwowaudit:OnInitialize
+-- copies the saved setting into the global.
+local function sharingSetting()
+    local ok, db = pcall(function()
+        return addon:Getdb()
+    end)
+    if ok and type(db) == "table" and db.wowauditSharingSetting then
+        return db.wowauditSharingSetting
+    end
+    return wowauditSharingSetting
+end
+
+-- A source that prefers its own desktop dump never replaces it with another
+-- client's share, even when that share is newer.
+local function prefersOwnData()
+    return wowauditIsSource and sharingSetting() == "SELF"
+end
+
 local function applyDataset(payload, fromCache)
     if type(payload) ~= "table" or not payload.timestamp then
+        return false
+    end
+    if prefersOwnData() then
         return false
     end
 
@@ -579,21 +600,28 @@ function wowauditShareData:OnInitialize()
     self:RegisterEvent("PLAYER_ENTERING_WORLD")
     self:RegisterEvent("GROUP_ROSTER_UPDATE")
 
+    local function unpackArgs(data)
+        if type(data) ~= "table" then
+            return
+        end
+        return unpack(data)
+    end
+
     Comms:BulkSubscribe(RCwowaudit.PREFIXES.MAIN, {
         data_version = function(data, sender)
-            self:OnDataVersionReceived(sender, unpack(data))
+            self:OnDataVersionReceived(sender, unpackArgs(data))
         end,
         request_data = function(data, sender)
-            self:OnRequestDataReceived(sender, unpack(data))
+            self:OnRequestDataReceived(sender, unpackArgs(data))
         end,
         data_ack = function(data, sender)
-            self:OnDataAckReceived(sender, unpack(data))
+            self:OnDataAckReceived(sender, unpackArgs(data))
         end,
         full_data = function(data, sender)
-            self:OnFullDataReceived(sender, unpack(data))
+            self:OnFullDataReceived(sender, unpackArgs(data))
         end,
         profile = function(data, sender)
-            self:OnProfileReceived(sender, unpack(data))
+            self:OnProfileReceived(sender, unpackArgs(data))
         end,
         request_profile = function(data, sender)
             RCwowaudit:GetModule("wowauditGearProfile"):SendOnRequest()

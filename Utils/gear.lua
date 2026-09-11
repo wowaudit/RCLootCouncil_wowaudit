@@ -494,7 +494,7 @@ wowauditSameSlotWishes = function(character, itemID, difficulty)
 
     table.sort(results, function(a, b)
         if a.value == b.value then
-            return a.id < b.id
+            return (tonumber(a.id) or 0) < (tonumber(b.id) or 0)
         end
         return a.value > b.value
     end)

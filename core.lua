@@ -22,11 +22,14 @@ local function responseFilterValues()
     -- String keys only: Blizzard's settings UI sorts these with `<`, which errors
     -- if response indices (numbers) are mixed with PASS/AUTOPASS/STATUS.
     for index = 1, addon:GetNumButtons() do
-        values[tostring(index)] = addon:GetResponse("default", index).text or ("Response " .. index)
+        local response = addon:GetResponse("default", index)
+        values[tostring(index)] = (response and response.text) or ("Response " .. index)
     end
 
-    values.PASS = addon:GetResponse("default", "PASS").text or "Pass"
-    values.AUTOPASS = addon:GetResponse("default", "AUTOPASS").text or "Autopass"
+    local pass = addon:GetResponse("default", "PASS")
+    local autopass = addon:GetResponse("default", "AUTOPASS")
+    values.PASS = (pass and pass.text) or "Pass"
+    values.AUTOPASS = (autopass and autopass.text) or "Autopass"
     values.STATUS = "Status texts"
 
     return values

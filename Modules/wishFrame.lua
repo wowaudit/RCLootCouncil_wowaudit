@@ -124,7 +124,8 @@ function wowauditWishFrame:Show()
                 end
 
                 row[self.colNameToIndex.difficulty] = DIFFICULTIES[difficulty]
-                row[self.colNameToIndex.class] = CreateAtlasMarkup(specToClassIcon[item.spec], 16, 16)
+                local atlas = specToClassIcon[item.spec]
+                row[self.colNameToIndex.class] = atlas and CreateAtlasMarkup(atlas, 16, 16) or ""
                 row[self.colNameToIndex.name] = character
                 row[self.colNameToIndex.item] = {
                     value = link or ("Loading ... (" .. item.id .. ")"),
@@ -266,7 +267,9 @@ function wowauditWishFrame:GetFrame()
         local sparkTex = self.Spark
         local minValue, maxValue = self:GetMinMaxValues()
         if not sparkTex or maxValue <= minValue or value <= minValue then
-            sparkTex:Hide()
+            if sparkTex then
+                sparkTex:Hide()
+            end
             return
         end
         sparkTex:Show()

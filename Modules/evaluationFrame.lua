@@ -25,6 +25,10 @@ local REFRESH_DELAY = 0.1
 local RESIZE_GRIP = 8
 local MIN_SCALE, MAX_SCALE = 0.6, 1.6
 
+local function clampScale(scale)
+    return math.min(MAX_SCALE, math.max(MIN_SCALE, tonumber(scale) or 1))
+end
+
 local SORT_LABELS = {
     response = "Response",
     bis = "Best in slot",
@@ -649,7 +653,7 @@ function wowauditEvaluationFrame:BuildList(f)
     scroll:EnableMouseWheel(true)
     scroll:SetScript("OnMouseWheel", function(self, delta)
         if IsControlKeyDown() then
-            lwin.SetScale(f, delta > 0 and f:GetScale() + 0.03 or f:GetScale() - 0.03)
+            lwin.SetScale(f, clampScale(f:GetScale() + (delta > 0 and 0.03 or -0.03)))
             return
         end
 
@@ -988,7 +992,8 @@ function wowauditEvaluationFrame:RefreshHeader(entry)
     local ilvl = C_Item.GetDetailedItemLevelInfo(entry.link or entry.string) or entry.ilvl
     header.ilvl:SetText(ilvl and tostring(ilvl) or "")
 
-    local bonuses = addon:GetItemBonusText(entry.link, "/")
+    local item = entry.link or entry.string
+    local bonuses = item and addon:GetItemBonusText(item, "/") or ""
     header.bonuses:SetText(bonuses ~= "" and ("+ " .. bonuses) or "")
 end
 
@@ -1110,9 +1115,12 @@ function wowauditEvaluationFrame.FilterMenu(_, level)
     end
 
     for index = 1, addon:GetNumButtons(typeCode) do
+        local response = addon:GetResponse(typeCode, index)
         info = MSA_DropDownMenu_CreateInfo()
-        info.text = addon:GetResponse(typeCode, index).text or ("Response " .. index)
-        info.colorCode = "|cff" .. addon.Utils:RGBToHex(addon:GetResponseColor(typeCode, index))
+        info.text = (response and response.text) or ("Response " .. index)
+        if response then
+            info.colorCode = "|cff" .. addon.Utils:RGBToHex(addon:GetResponseColor(typeCode, index))
+        end
         info.checked = responseVisible(index)
         info.keepShownOnClick = true
         info.func = function()
@@ -1122,8 +1130,9 @@ function wowauditEvaluationFrame.FilterMenu(_, level)
     end
 
     for _, key in ipairs({"PASS", "AUTOPASS", "STATUS"}) do
+        local response = key ~= "STATUS" and addon:GetResponse(typeCode, key)
         info = MSA_DropDownMenu_CreateInfo()
-        info.text = key == "STATUS" and "Status texts" or (addon:GetResponse(typeCode, key).text or key)
+        info.text = key == "STATUS" and "Status texts" or ((response and response.text) or key)
         info.checked = responseVisible(key)
         info.keepShownOnClick = true
         info.func = function()
@@ -1241,8 +1250,8 @@ function wowauditEvaluationFrame:ToggleScaleSlider()
         readout:SetText(format("%.2f", f:GetScale()))
 
         slider:SetScript("OnValueChanged", function(_, value)
-            lwin.SetScale(f, value)
-            readout:SetText(format("%.2f", value))
+            lwin.SetScale(f, clampScale(value))
+            readout:SetText(format("%.2f", clampScale(value)))
         end)
 
         panel.slider = slider
@@ -1257,10 +1266,15 @@ function wowauditEvaluationFrame:ToggleScaleSlider()
 
     -- Placed once, in UIParent's coordinates, so rescaling the window leaves it be.
     local button = f.header.scaleButton
-    local scale = f:GetScale()
+    local scale = clampScale(f:GetScale())
+    local right, bottom = button:GetRight(), button:GetBottom()
 
     panel:ClearAllPoints()
-    panel:SetPoint("TOPRIGHT", UIParent, "BOTTOMLEFT", button:GetRight() * scale, button:GetBottom() * scale - 4)
+    if right and bottom then
+        panel:SetPoint("TOPRIGHT", UIParent, "BOTTOMLEFT", right * scale, bottom * scale - 4)
+    else
+        panel:SetPoint("CENTER", UIParent, "CENTER")
+    end
     panel.slider:SetValue(scale)
     panel:Show()
 end

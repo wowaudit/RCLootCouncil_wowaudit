@@ -19,6 +19,9 @@ function wowauditBonusLoot:OnInitialize()
     -- so there is nothing to parse out of the chat log: anyone who shows up as a
     -- candidate is running RCLootCouncil already.
     Comms:Subscribe(addon.PREFIXES.MAIN, "bonus_roll", function(data, sender)
+        if type(data) ~= "table" then
+            return
+        end
         local kind, link = unpack(data)
         if kind == "item" then
             self:Record(sender, link)
