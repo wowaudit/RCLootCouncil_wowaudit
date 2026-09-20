@@ -2,6 +2,10 @@ local addon = LibStub("AceAddon-3.0"):GetAddon("RCLootCouncil")
 local Theme = wowauditTheme
 local RCwowaudit = addon:GetModule("RCwowaudit")
 
+local function evaluationModule()
+    return RCwowaudit:GetModule("wowauditEvaluationFrame", true)
+end
+
 -- One candidate per card. Every element sits at a fixed x offset shared by all
 -- rows, which is what makes the window scannable top to bottom.
 wowauditEvaluationRow = {}
@@ -30,18 +34,26 @@ Row.columns = {
     {key = "wishes", label = "Wishes in this slot", x = 444, width = 250},
     {key = "crests", label = "Crests left", x = 706, width = 132},
     {key = "bonusRoll", label = "Bonus roll", x = 850, width = 130},
-    {key = "award", label = "Award", x = 992, width = 80}
+    {key = "award", label = "Award", x = 992, width = 120}
 }
 
-Row.WIDTH = 1084
+Row.WIDTH = 1124
 
 local MAX_EQUIPPED_SHOWN = 2
 local HOVER_ALPHA = 0.06
 local NOTE_ICON = "Interface/BUTTONS/UI-GuildButton-PublicNote-Up.png"
 local NOTE_SIZE = 14
+local DICE_ICON = "Interface\\AddOns\\RCLootCouncil_wowaudit\\Media\\dice"
+local AWARD_BUTTON_HEIGHT = 14
+local META_CONTROL_SIZE = 14
+local AWARD_META_GAP = 4
 
 local function lineY(index)
     return -(TOP_PADDING + (index - 1) * LINE_HEIGHT)
+end
+
+local function awardMetaY()
+    return -(TOP_PADDING + AWARD_BUTTON_HEIGHT + AWARD_META_GAP)
 end
 
 local function columnX(key)
@@ -68,6 +80,11 @@ local function keepRowLit(row, child)
     end)
     child:HookScript("OnLeave", function()
         row.hover:SetAlpha(row:IsMouseOver() and HOVER_ALPHA or 0)
+    end)
+    child:HookScript("OnMouseUp", function(self, button)
+        if button == "RightButton" and row.OpenCandidateMenu then
+            row:OpenCandidateMenu("cursor")
+        end
     end)
 end
 
@@ -296,6 +313,19 @@ function Row:Create(parent)
     row:SetScript("OnLeave", function(self)
         self.hover:SetAlpha(0)
     end)
+    row:SetScript("OnMouseUp", function(self, button)
+        if button == "RightButton" then
+            self:OpenCandidateMenu("cursor")
+        end
+    end)
+
+    function row:OpenCandidateMenu(anchor)
+        local name = self.data and self.data.name
+        local eval = name and evaluationModule()
+        if eval then
+            eval:ShowCandidateMenu(name, anchor or self)
+        end
+    end
 
     self:BuildPlayerBlock(row)
     self:BuildEquippedBlock(row)
@@ -378,6 +408,7 @@ function Row:BuildEquippedBlock(row)
         line.chip = Theme:ItemChip(line, width, 16)
         line.chip:SetPoint("LEFT")
         line.chip:SetPoint("RIGHT", line.track, "LEFT", -4, 0)
+        keepRowLit(row, line.chip)
 
         row.equipped[index] = line
     end
@@ -446,6 +477,7 @@ function Row:BuildBonusRollBlock(row)
 
     row.bonusLootChip = Theme:ItemChip(row, width, 16)
     row.bonusLootChip:SetPoint("TOPLEFT", x, lineY(1))
+    keepRowLit(row, row.bonusLootChip)
 
     row.bonusLootStatus = Theme:Value(row, 11)
     row.bonusLootStatus:SetTextColor(Theme:Color("dim"))
@@ -456,22 +488,103 @@ end
 
 -- Same confirm dialog as the voting frame's right-click Award. The winner
 -- keeps a badge; everyone else can still award, which is how RCLC changes it.
+-- Line 2 is the voting-frame roll and vote controls, compacted under Award.
 function Row:BuildAwardBlock(row)
     local x, width = columnX("award")
+    local moreSize = AWARD_BUTTON_HEIGHT
+    local awardWidth = width - 8 - moreSize - 4
 
-    row.awardButton = Theme:Button(row, "Award", width - 8, 16)
+    row.awardButton = Theme:Button(row, "Award", awardWidth, AWARD_BUTTON_HEIGHT)
     row.awardButton:SetPoint("TOPLEFT", x, lineY(1))
     keepRowLit(row, row.awardButton)
     row.awardButton:SetScript("OnClick", function()
         local name = row.data and row.data.name
-        local eval = name and RCwowaudit:GetModule("wowauditEvaluationFrame", true)
+        local eval = name and evaluationModule()
         if eval then
             eval:Award(name)
         end
     end)
 
-    row.awardedPill = Theme:Pill(row, 16)
+    row.awardedPill = Theme:Pill(row, AWARD_BUTTON_HEIGHT)
     row.awardedPill:SetPoint("TOPLEFT", x, lineY(1))
+
+    row.moreButton = Theme:Button(row, "", moreSize, moreSize)
+    row.moreButton:SetPoint("TOPRIGHT", row, "TOPLEFT", x + width - 8, lineY(1))
+    row.moreButton.text:SetText("")
+    -- Three stacked dots instead of a glyph: GameFont often lacks ⋮.
+    local dots = {}
+    for index = 1, 3 do
+        local dot = row.moreButton:CreateTexture(nil, "OVERLAY")
+        dot:SetTexture("Interface\\Buttons\\WHITE8X8")
+        dot:SetSize(2, 2)
+        dot:SetVertexColor(Theme:Color("value"))
+        dots[index] = dot
+    end
+    dots[2]:SetPoint("CENTER")
+    dots[1]:SetPoint("BOTTOM", dots[2], "TOP", 0, 2)
+    dots[3]:SetPoint("TOP", dots[2], "BOTTOM", 0, -2)
+    keepRowLit(row, row.moreButton)
+    row.moreButton:SetScript("OnClick", function(self)
+        row:OpenCandidateMenu(self)
+    end)
+
+    local meta = CreateFrame("Frame", nil, row)
+    meta:SetHeight(META_CONTROL_SIZE)
+    meta:SetPoint("TOPLEFT", x, awardMetaY())
+    meta:SetPoint("TOPRIGHT", row, "TOPLEFT", x + width - 8, awardMetaY())
+    row.awardMeta = meta
+
+    row.rollLabel = Theme:Value(meta, 11)
+    row.rollLabel:SetTextColor(Theme:Color("dim"))
+    row.rollLabel:SetText("Roll")
+    row.rollLabel:SetPoint("LEFT")
+
+    row.awardRoll = Theme:Value(meta, 12)
+    row.awardRoll:SetPoint("LEFT", row.rollLabel, "RIGHT", 4, 0)
+    row.awardRoll:SetJustifyH("LEFT")
+
+    row.diceButton = Theme:Button(meta, "", META_CONTROL_SIZE, META_CONTROL_SIZE)
+    row.diceButton:SetPoint("LEFT", row.rollLabel, "RIGHT", 4, 0)
+    row.diceButton.text:SetText("")
+    row.diceButton.icon = row.diceButton:CreateTexture(nil, "ARTWORK")
+    row.diceButton.icon:SetTexture(DICE_ICON)
+    row.diceButton.icon:SetSize(12, 12)
+    row.diceButton.icon:SetPoint("CENTER")
+    keepRowLit(row, row.diceButton)
+    row.diceButton:HookScript("OnEnter", function(self)
+        Theme:ShowTooltip(self, "Add rolls")
+    end)
+    row.diceButton:HookScript("OnLeave", function()
+        Theme:HideTooltip()
+    end)
+    row.diceButton:SetScript("OnClick", function()
+        local eval = evaluationModule()
+        if eval then
+            eval:RollForAll()
+        end
+    end)
+
+    row.voteButton = Theme:Button(meta, "+", META_CONTROL_SIZE, META_CONTROL_SIZE)
+    row.voteButton:SetPoint("RIGHT")
+    keepRowLit(row, row.voteButton)
+    row.voteButton:SetScript("OnClick", function()
+        local name = row.data and row.data.name
+        local eval = name and evaluationModule()
+        if eval then
+            eval:Vote(name)
+        end
+    end)
+
+    row.votesHover = CreateFrame("Frame", nil, meta)
+    row.votesHover:SetHeight(META_CONTROL_SIZE)
+    row.votesLabel = Theme:Value(row.votesHover, 11)
+    row.votesLabel:SetTextColor(Theme:Color("dim"))
+    row.votesLabel:SetText("Votes")
+    row.votesLabel:SetPoint("LEFT")
+    row.votesCount = Theme:Value(row.votesHover, 12)
+    row.votesCount:SetPoint("LEFT", row.votesLabel, "RIGHT", 4, 0)
+    Theme:AttachTooltip(row.votesHover)
+    keepRowLit(row, row.votesHover)
 end
 
 function Row:SetData(row, data, index)
@@ -722,12 +835,72 @@ end
 function Row:SetAwardData(row, data)
     local winner = type(data.awardedTo) == "string" and
                        (addon:UnitIsUnit(data.name, data.awardedTo) or data.name == data.awardedTo)
+    local awarded = type(data.awardedTo) == "string"
 
+    local _, width = columnX("award")
+    local awardWidth = width - 8 - AWARD_BUTTON_HEIGHT - 4
     if winner then
         row.awardButton:Hide()
         row.awardedPill:Set("Awarded", Theme:Color("accent"))
+        row.awardedPill:SetWidth(awardWidth)
     else
         row.awardedPill:Hide()
         row.awardButton:Show()
+    end
+
+    if addon.isMasterLooter then
+        row.moreButton:Show()
+    else
+        row.moreButton:Hide()
+    end
+
+    local showRoll = data.roll ~= nil
+    local showDice = not showRoll and data.canRoll and not data.hasRolls and not awarded
+
+    if showRoll or showDice then
+        row.rollLabel:SetWidth(math.max(1, row.rollLabel:GetStringWidth()))
+        row.rollLabel:Show()
+    else
+        row.rollLabel:Hide()
+        row.rollLabel:SetWidth(0.01)
+    end
+
+    if showRoll then
+        row.awardRoll:SetText(tostring(data.roll))
+        row.awardRoll:SetWidth(math.max(1, row.awardRoll:GetStringWidth()))
+        row.awardRoll:Show()
+        row.diceButton:Hide()
+    elseif showDice then
+        row.awardRoll:Hide()
+        row.diceButton:Show()
+    else
+        row.awardRoll:Hide()
+        row.diceButton:Hide()
+    end
+
+    local showVote = data.canVote and not awarded
+    if showVote then
+        row.voteButton:SetLabel(data.haveVoted and "-" or "+")
+        row.voteButton:Show()
+    else
+        row.voteButton:Hide()
+    end
+
+    row.votesCount:SetText(tostring(data.votes or 0))
+    row.votesHover:SetWidth(math.max(1, row.votesLabel:GetStringWidth() + 4 +
+        row.votesCount:GetStringWidth()))
+    row.votesHover:ClearAllPoints()
+    if showVote then
+        row.votesHover:SetPoint("RIGHT", row.voteButton, "LEFT", -6, 0)
+    else
+        row.votesHover:SetPoint("RIGHT")
+    end
+    row.votesHover:SetPoint("TOP")
+    row.votesHover:SetPoint("BOTTOM")
+
+    if data.voteTooltip then
+        row.votesHover:SetTooltip(unpack(data.voteTooltip))
+    else
+        row.votesHover:SetTooltip()
     end
 end

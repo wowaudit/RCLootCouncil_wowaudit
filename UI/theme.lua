@@ -381,7 +381,13 @@ function Theme:ShowTooltip(owner, ...)
 
     textTooltip:SetOwner(owner, "ANCHOR_RIGHT")
     for i = 1, select("#", ...) do
-        textTooltip:AddLine((select(i, ...)), 1, 1, 1)
+        local line = select(i, ...)
+        -- Class-coloured names already carry |c codes; forcing white would wash them out.
+        if type(line) == "string" and line:find("|c", 1, true) then
+            textTooltip:AddLine(line)
+        else
+            textTooltip:AddLine(line, 1, 1, 1)
+        end
     end
     textTooltip:Show()
 end

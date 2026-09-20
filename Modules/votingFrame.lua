@@ -1,5 +1,6 @@
 local addon = LibStub("AceAddon-3.0"):GetAddon("RCLootCouncil")
 local RCVotingFrame = addon:GetModule("RCVotingFrame")
+local LibDialog = LibStub("LibDialog-1.1")
 
 local RCwowaudit = addon:GetModule("RCwowaudit")
 local Theme = wowauditTheme
@@ -15,6 +16,12 @@ function wowauditVotingFrame:OnInitialize()
     end
 
     self:SecureHook(RCVotingFrame, "OnEnable", "AddButtonToFrame")
+    if not self:IsHooked(RCVotingFrame, "Show") then
+        self:RawHook(RCVotingFrame, "Show", "OnVotingFrameShow")
+    end
+    if not self:IsHooked(RCVotingFrame, "EndSession") then
+        self:SecureHook(RCVotingFrame, "EndSession", "OnVotingFrameEndSession")
+    end
 
     -- Translate sortnext into colNames (copied from RCLootCouncil_ExtraUtilities)
     self.sortnext = {}
@@ -41,6 +48,55 @@ function wowauditVotingFrame:OnInitialize()
 
     self:RegisterMessage("RCSessionChangedPre", "OnMessageReceived")
     self:UpdateSortNext()
+end
+
+-- Alongside/replace piggyback on RCLC's Show so Auto Open and `/rc open` stay in
+-- sync. Skipping the original Show in replace is what keeps the voting frame down.
+function wowauditVotingFrame:OnVotingFrameShow(frame)
+    self.visibilityPrompted = nil
+    local visibility = RCwowaudit:EvaluationVisibility()
+    if visibility == "replace" then
+        local lootTable = frame.GetLootTable and frame:GetLootTable()
+        local sessionIndex = frame.GetCurrentSession and frame:GetCurrentSession() or 1
+        if frame.frame and lootTable and lootTable[sessionIndex] then
+            frame:Hide()
+            RCwowaudit:GetModule("wowauditEvaluationFrame"):Show()
+            return
+        end
+        return self.hooks[RCVotingFrame].Show(frame)
+    end
+
+    self.hooks[RCVotingFrame].Show(frame)
+    if visibility == "alongside" and frame.frame and frame.frame:IsShown() then
+        RCwowaudit:GetModule("wowauditEvaluationFrame"):Show()
+    end
+end
+
+-- Unspecified users who actually used evaluation this session get a one-time
+-- chooser. Abort still has unawarded items, so it must not fire the prompt.
+function wowauditVotingFrame:OnVotingFrameEndSession(frame, hide)
+    if hide and RCwowaudit:EvaluationVisibility() == "replace" then
+        local eval = RCwowaudit:GetModule("wowauditEvaluationFrame", true)
+        if eval then
+            eval:Hide()
+        end
+    end
+
+    if self.visibilityPrompted then
+        return
+    end
+    if RCwowaudit:EvaluationVisibility() ~= "unspecified" then
+        return
+    end
+    local eval = RCwowaudit:GetModule("wowauditEvaluationFrame", true)
+    if not eval or not eval.frame or not eval.frame:IsShown() then
+        return
+    end
+    if frame.HasUnawardedItems and frame:HasUnawardedItems() then
+        return
+    end
+    self.visibilityPrompted = true
+    LibDialog:Spawn("RCWOWAUDIT_EVALUATION_VISIBILITY")
 end
 
 function wowauditVotingFrame:SetCellWishlist(frame, data, cols, row, realrow, column, fShow, table, ...)

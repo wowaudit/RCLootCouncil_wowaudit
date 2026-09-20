@@ -1,7 +1,9 @@
 local addon = LibStub("AceAddon-3.0"):GetAddon("RCLootCouncil")
 local Comms = addon.Require "Services.Comms"
+local Council = addon.Require "Data.Council"
 local lwin = LibStub("LibWindow-1.1")
 local LibDialog = LibStub("LibDialog-1.1")
+local L = LibStub("AceLocale-3.0"):GetLocale("RCLootCouncil")
 
 local RCwowaudit = addon:GetModule("RCwowaudit")
 local wowauditEvaluationFrame = RCwowaudit:NewModule("wowauditEvaluationFrame", "AceEvent-3.0", "AceHook-3.0",
@@ -23,6 +25,10 @@ local SESSION_COLUMN_WRAP = 10
 local SCROLLBAR_WIDTH = 12
 local REFRESH_DELAY = 0.1
 local RESIZE_GRIP = 8
+local SUMMARY_LINE_GAP = 4
+local SUMMARY_SECTION_GAP = 12
+local SUMMARY_PAD_X = 10
+local SUMMARY_PAD_Y = 8
 local MIN_SCALE, MAX_SCALE = 0.6, 1.6
 
 local function clampScale(scale)
@@ -31,13 +37,15 @@ end
 
 local SORT_LABELS = {
     response = "Response",
+    votes = "Votes",
+    rolls = "Rolls",
     bis = "Best in slot",
     value = "Wish value",
     ilvl = "Item level",
     name = "Name"
 }
 
-local SORT_ORDER = {"response", "bis", "value", "ilvl", "name"}
+local SORT_ORDER = {"response", "votes", "rolls", "bis", "value", "ilvl", "name"}
 
 local DIFFICULTY_LABELS = {
     R = "LFR",
@@ -113,6 +121,7 @@ end
 local function settings()
     local db = addon:Getdb()
     db.wowauditEvaluationFilters = db.wowauditEvaluationFilters or {}
+    db.wowauditEvaluationFilters.ranks = db.wowauditEvaluationFilters.ranks or {}
     db.wowauditEvaluationSort = db.wowauditEvaluationSort or "response"
     return db
 end
@@ -132,6 +141,21 @@ local function responseVisible(response)
     return filters.STATUS == true
 end
 
+-- Rank names come from the candidate; GetGuildRanks maps those names to the
+-- index the filter menu stores. Missing keys default to shown, like RCLC.
+local function rankVisible(rank)
+    local ranks = settings().wowauditEvaluationFilters.ranks
+    local guildRanks = addon:GetGuildRanks()
+    if rank and guildRanks[rank] then
+        return ranks[guildRanks[rank]] ~= false
+    end
+    return ranks.notInYourGuild ~= false
+end
+
+local function rankFilterChecked(key)
+    return settings().wowauditEvaluationFilters.ranks[key] ~= false
+end
+
 -- Awarding overwrites the candidate's response with "AWARDED" and stashes the
 -- one they actually clicked in real_response. Filter and display that original
 -- so Mainspec still shows as Mainspec; the award column already marks the winner.
@@ -145,6 +169,157 @@ end
 local function awardedToCandidate(entry, name)
     local awarded = entry and entry.awarded
     return type(awarded) == "string" and (addon:UnitIsUnit(name, awarded) or name == awarded)
+end
+
+-- RCLC writes these IDs onto candidate.response while the player still has the
+-- loot frame open. The yellow "please wait" sentence is only GetResponse().text.
+local AWAITING_RESPONSES = {
+    ANNOUNCED = true,
+    WAIT = true,
+    NOTANNOUNCED = true
+}
+
+local function isAwaitingResponse(key)
+    return AWAITING_RESPONSES[key] == true
+end
+
+local function classColoredName(name)
+    if addon.GetUnitClassColoredName then
+        return addon:GetUnitClassColoredName(name)
+    end
+    return addon.Ambiguate(name)
+end
+
+local function joinClassColoredNames(members)
+    local parts = {}
+    for _, member in ipairs(members) do
+        tinsert(parts, classColoredName(member.name))
+    end
+    return table.concat(parts, ", ")
+end
+
+local function cmpHiddenName(a, b)
+    return a.name < b.name
+end
+
+-- Everyone the response filter hides, split into "still choosing" vs grouped
+-- Autopass/Transmog/etc. Rank-only hides are omitted: those are not a hidden response.
+local function buildHiddenGroups(entry)
+    local typeCode = entry.typeCode
+    local grouped = {}
+    local awaiting = {}
+
+    for name, candidate in pairs(entry.candidates or {}) do
+        if not awardedToCandidate(entry, name) then
+            local key = candidateResponse(candidate)
+            local member = {
+                name = name,
+                class = candidate.class
+            }
+            -- Still-choosing people always belong in the awaiting block, even if
+            -- "Status texts" is on. Rank-only hides stay out, same as before.
+            if isAwaitingResponse(key) then
+                if rankVisible(candidate.rank) then
+                    tinsert(awaiting, member)
+                end
+            elseif not responseVisible(key) then
+                grouped[key] = grouped[key] or {}
+                tinsert(grouped[key], member)
+            end
+        end
+    end
+
+    table.sort(awaiting, cmpHiddenName)
+
+    local groups = {}
+    for key, members in pairs(grouped) do
+        table.sort(members, cmpHiddenName)
+        local response = addon:GetResponse(typeCode, key)
+        tinsert(groups, {
+            key = key,
+            text = (response and response.text) or tostring(key),
+            color = (response and response.color) or {1, 1, 1},
+            sort = (response and response.sort) or 999,
+            members = members
+        })
+    end
+    table.sort(groups, function(a, b)
+        if a.sort ~= b.sort then
+            return a.sort < b.sort
+        end
+        return a.text < b.text
+    end)
+
+    return groups, awaiting
+end
+
+local function sessionHasRolls(entry)
+    if entry.hasRolls then
+        return true
+    end
+    for _, candidate in pairs(entry.candidates or {}) do
+        if candidate.roll ~= nil then
+            return true
+        end
+    end
+    return false
+end
+
+-- Same visibility rules as RCVotingFrame.SetCellVotes: names stay hidden under
+-- anonymous voting, and hideVotes blanks the count until this client has voted.
+local function canShowVoteNames(entry)
+    local mldb = addon.mldb or {}
+    local db = addon:Getdb()
+    if mldb.anonymousVoting and not (db.showForML and addon.isMasterLooter) then
+        return false
+    end
+    if mldb.hideVotes and not entry.haveVoted and not (mldb.observe and not addon.isCouncil) then
+        return false
+    end
+    return true
+end
+
+local function displayedVotes(entry, candidate)
+    local mldb = addon.mldb or {}
+    if mldb.hideVotes and not entry.haveVoted and addon.isCouncil then
+        return 0
+    end
+    return candidate.votes or 0
+end
+
+local function voterMatches(voters, councilName)
+    for _, voter in ipairs(voters) do
+        if voter == councilName or addon:UnitIsUnit(voter, councilName) then
+            return true
+        end
+    end
+    return false
+end
+
+local function voteTooltipLines(candidate)
+    local voters = candidate.voters or {}
+    local lines = {"Voted"}
+    if #voters == 0 then
+        tinsert(lines, "No votes")
+    else
+        for _, name in ipairs(voters) do
+            tinsert(lines, addon:GetClassIconAndColoredName(name))
+        end
+    end
+
+    local missingHeader = #lines + 1
+    tinsert(lines, "Haven't voted")
+    local missing = 0
+    for _, player in pairs(Council:Get()) do
+        if not voterMatches(voters, player.name) then
+            missing = missing + 1
+            tinsert(lines, addon:GetClassIconAndColoredName(player.name))
+        end
+    end
+    if missing == 0 then
+        tremove(lines, missingHeader)
+    end
+    return lines
 end
 
 -- Asks the client to load anything not in its item cache yet, so the redraw on
@@ -227,6 +402,10 @@ function wowauditEvaluationFrame:OnInitialize()
         lootAck = refresh,
         vote = refresh,
         awarded = refresh,
+        srolls = refresh,
+        rrolls = refresh,
+        roll = refresh,
+        reset_rolls = refresh,
         lootTable = onNewLootTable,
         lt_add = refresh
     })
@@ -295,8 +474,59 @@ function wowauditEvaluationFrame:Award(name)
     LibDialog:Spawn("RCLOOTCOUNCIL_CONFIRM_AWARD", module:GetAwardPopupData(session, name, candidate))
 end
 
+-- Same send-and-flip-haveVoted path as RCVotingFrame.SetCellVote. The vote
+-- count itself is applied when the comm comes back through HandleVote.
+function wowauditEvaluationFrame:Vote(name)
+    local session = currentSession()
+    local lootTable = displayLootTable()
+    local entry = lootTable[session]
+    local candidate = entry and entry.candidates and entry.candidates[name]
+    if not entry or not candidate or entry.awarded then
+        return
+    end
+    if not (addon.isCouncil or addon.isMasterLooter) then
+        return
+    end
+
+    local mldb = addon.mldb or {}
+    if candidate.haveVoted then
+        addon:Send("group", "vote", session, name, -1)
+        candidate.haveVoted = false
+
+        local haveVoted = false
+        for _, other in pairs(entry.candidates) do
+            if other.haveVoted then
+                haveVoted = true
+                break
+            end
+        end
+        entry.haveVoted = haveVoted
+    else
+        if not mldb.selfVote and addon:UnitIsUnit("player", name) then
+            return addon:Print(L["The Master Looter doesn't allow votes for yourself."])
+        end
+        if not mldb.multiVote and entry.haveVoted then
+            return addon:Print(L["The Master Looter doesn't allow multiple votes."])
+        end
+        addon:Send("group", "vote", session, name, 1)
+        candidate.haveVoted = true
+        entry.haveVoted = true
+    end
+
+    self:ScheduleRefresh()
+end
+
+function wowauditEvaluationFrame:RollForAll()
+    local module = votingFrame()
+    if not module or not addon.isMasterLooter or not module.DoRandomRolls then
+        return
+    end
+    module:DoRandomRolls(currentSession())
+end
+
 function wowauditEvaluationFrame:Show()
     local frame = self:GetFrame()
+    self:UpdateEscapeClose()
     if frame.minimized then
         self:ToggleMinimized()
     end
@@ -333,6 +563,45 @@ function wowauditEvaluationFrame:Hide()
     end
 end
 
+-- In replace mode this window is the voting UI, so X matches the voting frame's
+-- Abort/Close: ML with an active session confirms ending it. After abort the
+-- loot table still has unawarded items, so we key off ML.running, not that.
+function wowauditEvaluationFrame:Close()
+    if RCwowaudit:EvaluationVisibility() == "replace" and addon.isMasterLooter then
+        local ml = addon:GetActiveModule("masterlooter")
+        local module = votingFrame()
+        if ml and ml.running and module and module.HasUnawardedItems and module:HasUnawardedItems() then
+            LibDialog:Spawn("RCLOOTCOUNCIL_CONFIRM_ABORT")
+            return
+        end
+    end
+    self:Hide()
+end
+
+-- Voting frame is a critical window and is not in UISpecialFrames. When we
+-- replace it, Escape must not close this one either.
+function wowauditEvaluationFrame:UpdateEscapeClose()
+    if not self.frame then
+        return
+    end
+
+    local listed
+    for index, name in ipairs(UISpecialFrames) do
+        if name == FRAME_NAME then
+            listed = index
+            break
+        end
+    end
+
+    if RCwowaudit:EvaluationVisibility() == "replace" then
+        if listed then
+            tremove(UISpecialFrames, listed)
+        end
+    elseif not listed then
+        tinsert(UISpecialFrames, FRAME_NAME)
+    end
+end
+
 function wowauditEvaluationFrame:GetFrame()
     if self.frame then
         return self.frame
@@ -360,6 +629,8 @@ function wowauditEvaluationFrame:GetFrame()
     lwin:Embed(f)
     f:RegisterConfig(db.UI[FRAME_NAME])
     f:RestorePosition()
+    -- LibWindow may restore an older saved width; the column geometry is fixed.
+    f:SetWidth(width)
     -- NOT MakeDraggable: that also does RegisterForDrag("LeftButton") on f. RCLootCouncil's
     -- RCFrame calls MakeDraggable too, but its top-level frame is never EnableMouse'd, so those
     -- drag handlers stay dormant and only SetMovable matters. We do enable the mouse on f (to
@@ -405,9 +676,8 @@ function wowauditEvaluationFrame:GetFrame()
         end
     end)
 
-    tinsert(UISpecialFrames, FRAME_NAME)
-
     self.frame = f
+    self:UpdateEscapeClose()
     return f
 end
 
@@ -491,6 +761,25 @@ local function bindDropDownButton(button, menu)
     end)
 end
 
+-- Same MSA menu the voting frame attaches to a row right-click. The menu
+-- itself is empty unless this client is the master looter.
+function wowauditEvaluationFrame:ShowCandidateMenu(name, anchor)
+    local menu = _G.RCLootCouncil_VotingFrame_RightclickMenu
+    if not menu or not name or not addon.isMasterLooter then
+        return
+    end
+
+    hookDropDownClose()
+    local closed = closedDropDown
+    closedDropDown = nil
+    if closed == menu and menu.name == name then
+        return
+    end
+
+    menu.name = name
+    MSA_ToggleDropDownMenu(1, nil, menu, anchor, 0, 0)
+end
+
 function wowauditEvaluationFrame:BuildHeader(f)
     local header = CreateFrame("Frame", nil, f)
     header:SetHeight(HEADER_HEIGHT)
@@ -558,7 +847,7 @@ function wowauditEvaluationFrame:BuildHeader(f)
     local close = Theme:Button(header, "X", 24, 22)
     close:SetPoint("RIGHT", -PADDING, 0)
     close:SetScript("OnClick", function()
-        wowauditEvaluationFrame:Hide()
+        wowauditEvaluationFrame:Close()
     end)
 
     header.minimizeButton = Theme:Button(header, "_", 24, 22)
@@ -596,6 +885,27 @@ function wowauditEvaluationFrame:BuildHeader(f)
     header.difficultyButton = Theme:Button(header, "Wishes: Heroic", 124, 22)
     header.difficultyButton:SetPoint("RIGHT", header.valueButton, "LEFT", -6, 0)
     bindDropDownButton(header.difficultyButton, difficultyMenu)
+
+    -- Two-line winner readout, parked left of the wishes control so the item
+    -- identity on the left and the header buttons on the right stay put.
+    local awarded = CreateFrame("Frame", nil, header)
+    awarded:SetSize(1, 28)
+    awarded:SetPoint("LEFT", header.ilvl, "RIGHT", 16, 0)
+
+    awarded.label = Theme:Value(awarded, 11)
+    awarded.label:SetText("Awarded to")
+    awarded.label:SetTextColor(0.2, 1, 0.2)
+    awarded.label:SetJustifyH("CENTER")
+    awarded.label:SetPoint("TOPLEFT")
+    awarded.label:SetPoint("TOPRIGHT")
+
+    awarded.player = Theme:Value(awarded, 13, true)
+    awarded.player:SetJustifyH("CENTER")
+    awarded.player:SetPoint("TOPLEFT", awarded.label, "BOTTOMLEFT", 0, 0)
+    awarded.player:SetPoint("TOPRIGHT", awarded.label, "BOTTOMRIGHT", 0, 0)
+    awarded:Hide()
+
+    header.awarded = awarded
 
     f.header = header
 end
@@ -697,6 +1007,25 @@ function wowauditEvaluationFrame:BuildList(f)
     f.emptyText:SetTextColor(Theme:Color("dim"))
     f.emptyText:SetPoint("TOP", scroll, "TOP", 0, -40)
     f.emptyText:Hide()
+
+    local awaiting = CreateFrame("Frame", nil, child)
+    awaiting:SetWidth(Row.WIDTH)
+    Theme:Fill(awaiting, "card", "BACKGROUND")
+    Theme:Hairline(awaiting, "outline", 0)
+    Theme:Hairline(awaiting, "hairline", 1)
+    awaiting.text = Theme:Value(awaiting, 12)
+    awaiting.text:SetJustifyH("LEFT")
+    awaiting.text:SetWordWrap(true)
+    awaiting.text:SetPoint("TOPLEFT", SUMMARY_PAD_X, -SUMMARY_PAD_Y)
+    awaiting.text:SetPoint("TOPRIGHT", -SUMMARY_PAD_X, -SUMMARY_PAD_Y)
+    awaiting:Hide()
+    f.awaitingSummary = awaiting
+
+    local hidden = CreateFrame("Frame", nil, child)
+    hidden:SetWidth(Row.WIDTH)
+    hidden.lines = {}
+    hidden:Hide()
+    f.hiddenSummary = hidden
 end
 
 function wowauditEvaluationFrame:BuildFooter(f)
@@ -754,10 +1083,15 @@ function wowauditEvaluationFrame:BuildRowData(entry, session)
     local rows = {}
     local best = 0
     local profilesFound = 0
+    local hasRolls = sessionHasRolls(entry)
+    local canVote = addon.isCouncil or addon.isMasterLooter
+    local canRoll = addon.isMasterLooter
+    local showVoteNames = canShowVoteNames(entry)
 
     for name, candidate in pairs(entry.candidates or {}) do
         local responseKey = candidateResponse(candidate)
-        if awardedToCandidate(entry, name) or responseVisible(responseKey) then
+        if not isAwaitingResponse(responseKey) and (awardedToCandidate(entry, name) or
+            (responseVisible(responseKey) and rankVisible(candidate.rank))) then
             local response = addon:GetResponse(typeCode, responseKey)
             local wishes = wowauditDataToDisplay(entry.itemID, entry.string, name, difficulty)
             local profile = wowauditProfileForCharacter(name)
@@ -814,7 +1148,13 @@ function wowauditEvaluationFrame:BuildRowData(entry, session)
                 responseSort = response and response.sort or 999,
                 note = candidate.note,
                 roll = candidate.roll,
-                votes = candidate.votes,
+                votes = displayedVotes(entry, candidate),
+                haveVoted = candidate.haveVoted,
+                voteTooltip = showVoteNames and voteTooltipLines(candidate) or nil,
+                hasRolls = hasRolls,
+                canVote = canVote,
+                canRoll = canRoll,
+                rank = candidate.rank,
                 ilvl = candidate.ilvl,
                 gear1 = candidate.gear1,
                 gear2 = candidate.gear2,
@@ -875,13 +1215,92 @@ local function cmpIlvl(a, b)
     end
 end
 
+local function cmpVotes(a, b)
+    local aVotes, bVotes = tonumber(a.votes) or 0, tonumber(b.votes) or 0
+    if aVotes ~= bVotes then
+        return aVotes > bVotes
+    end
+end
+
+local function cmpRoll(a, b)
+    local aRoll, bRoll = tonumber(a.roll), tonumber(b.roll)
+    if aRoll ~= bRoll then
+        if not aRoll then
+            return false
+        end
+        if not bRoll then
+            return true
+        end
+        return aRoll > bRoll
+    end
+end
+
 local sortChains = {
     response = {cmpResponse, cmpBis, cmpValue, cmpName},
+    votes = {cmpVotes, cmpResponse, cmpName},
+    rolls = {cmpRoll, cmpResponse, cmpName},
     bis = {cmpBis, cmpValue, cmpResponse, cmpName},
     value = {cmpValue, cmpResponse, cmpName},
     ilvl = {cmpIlvl, cmpResponse, cmpName},
     name = {cmpName}
 }
+
+local function acquireHiddenLine(summary, index)
+    local line = summary.lines[index]
+    if not line then
+        line = Theme:Value(summary, 12)
+        line:SetJustifyH("LEFT")
+        line:SetWordWrap(true)
+        line:SetWidth(Row.WIDTH)
+        summary.lines[index] = line
+    end
+    return line
+end
+
+local function layoutAwaitingSummary(frame, awaiting)
+    if #awaiting == 0 then
+        frame:Hide()
+        return 0
+    end
+
+    frame.text:SetText("Awaiting response: " .. joinClassColoredNames(awaiting))
+    frame:Show()
+    local height = math.max(frame.text:GetStringHeight(), 1) + SUMMARY_PAD_Y * 2
+    frame:SetHeight(height)
+    return height
+end
+
+local function layoutHiddenSummary(frame, groups)
+    if #groups == 0 then
+        frame:Hide()
+        return 0
+    end
+
+    frame:Show()
+    local offset = 0
+    for index, group in ipairs(groups) do
+        local line = acquireHiddenLine(frame, index)
+        local r, g, b = group.color[1] or 1, group.color[2] or 1, group.color[3] or 1
+        local hex = addon.Utils:RGBToHex(r, g, b)
+        line:SetText("|cff" .. hex .. group.text .. ":|r " .. joinClassColoredNames(group.members))
+        line:ClearAllPoints()
+        line:SetPoint("TOPLEFT", 0, -offset)
+        line:SetPoint("TOPRIGHT", 0, -offset)
+        line:Show()
+        offset = offset + math.max(line:GetStringHeight(), 1) + SUMMARY_LINE_GAP
+    end
+
+    for index = #groups + 1, #frame.lines do
+        frame.lines[index]:Hide()
+    end
+
+    if offset > 0 then
+        offset = offset - SUMMARY_LINE_GAP
+    end
+    frame:SetHeight(math.max(offset, 1))
+    frame:Show()
+    return offset
+end
 
 function wowauditEvaluationFrame:Refresh()
     local f = self.frame
@@ -899,6 +1318,8 @@ function wowauditEvaluationFrame:Refresh()
     f.rowPool:ReleaseAll()
 
     if not entry then
+        f.awaitingSummary:Hide()
+        f.hiddenSummary:Hide()
         f.scrollChild:SetHeight(1)
         f.emptyText:SetText("No loot session is running.")
         f.emptyText:Show()
@@ -908,6 +1329,7 @@ function wowauditEvaluationFrame:Refresh()
     end
 
     local rows, profilesFound = self:BuildRowData(entry, session)
+    local groups, awaiting = buildHiddenGroups(entry)
 
     local chain = sortChains[settings().wowauditEvaluationSort] or sortChains.response
 
@@ -922,6 +1344,12 @@ function wowauditEvaluationFrame:Refresh()
     end)
 
     local offset = 0
+    local awaitingHeight = layoutAwaitingSummary(f.awaitingSummary, awaiting)
+    if awaitingHeight > 0 then
+        f.awaitingSummary:SetPoint("TOPLEFT", f.scrollChild, "TOPLEFT", 0, 0)
+        offset = awaitingHeight + Row.SPACING
+    end
+
     for index, data in ipairs(rows) do
         local row = f.rowPool:Acquire()
         row:SetPoint("TOPLEFT", f.scrollChild, "TOPLEFT", 0, -offset)
@@ -929,10 +1357,22 @@ function wowauditEvaluationFrame:Refresh()
         row:Show()
         offset = offset + row:GetHeight() + Row.SPACING
     end
+    if #rows > 0 then
+        offset = offset - Row.SPACING
+    end
 
-    f.scrollChild:SetHeight(math.max(1, offset > 0 and offset - Row.SPACING or 1))
+    local hiddenHeight = layoutHiddenSummary(f.hiddenSummary, groups)
+    if hiddenHeight > 0 then
+        if offset > 0 then
+            offset = offset + SUMMARY_SECTION_GAP
+        end
+        f.hiddenSummary:SetPoint("TOPLEFT", f.scrollChild, "TOPLEFT", 0, -offset)
+        offset = offset + hiddenHeight
+    end
 
-    if #rows == 0 then
+    f.scrollChild:SetHeight(math.max(1, offset))
+
+    if #rows == 0 and awaitingHeight == 0 and hiddenHeight == 0 then
         f.emptyText:SetText("No candidates match the response filter.")
         f.emptyText:Show()
     else
@@ -941,6 +1381,41 @@ function wowauditEvaluationFrame:Refresh()
 
     self:RefreshFooter(profilesFound, #rows)
     self:UpdateScrollbar()
+end
+
+local function candidateClass(entry, awarded)
+    local candidate = entry.candidates and entry.candidates[awarded]
+    if candidate then
+        return candidate.class
+    end
+    for name, other in pairs(entry.candidates or {}) do
+        if addon:UnitIsUnit(name, awarded) or name == awarded then
+            return other.class
+        end
+    end
+end
+
+function wowauditEvaluationFrame:RefreshAwardedTo(header, entry)
+    local awarded = header.awarded
+    local winner = entry and type(entry.awarded) == "string" and entry.awarded
+    if not winner then
+        awarded:Hide()
+        header.bonuses:SetPoint("LEFT", header.ilvl, "RIGHT", 8, 0)
+        return
+    end
+
+    awarded.player:SetText(addon.Ambiguate(winner))
+    local class = candidateClass(entry, winner)
+    local color = class and (addon.GetClassColor and addon:GetClassColor(class) or RAID_CLASS_COLORS[class])
+    if color then
+        awarded.player:SetTextColor(color.r, color.g, color.b)
+    else
+        awarded.player:SetTextColor(Theme:Color("value"))
+    end
+
+    awarded:SetWidth(math.max(awarded.label:GetStringWidth(), awarded.player:GetStringWidth(), 1))
+    awarded:Show()
+    header.bonuses:SetPoint("LEFT", awarded, "RIGHT", 8, 0)
 end
 
 function wowauditEvaluationFrame:RefreshHeader(entry)
@@ -952,6 +1427,7 @@ function wowauditEvaluationFrame:RefreshHeader(entry)
     local _, nativeDifficulty = wishLookupDifficulty(entry)
     local shownDifficulty = wishDifficultyOverride or nativeDifficulty
     header.difficultyButton:SetLabel("Wishes: " .. (DIFFICULTY_LABELS[shownDifficulty] or "Auto"))
+    self:RefreshAwardedTo(header, entry)
 
     local track = entry and (wowauditTrackForItem(entry.link) or wowauditTrackForItem(entry.string))
     crestsLabel:SetText(strupper(track and (track.track .. " crests left") or "Crests"))
@@ -1095,50 +1571,91 @@ end
 -- Built with RCLootCouncil's embedded dropdown library so the menus look and behave
 -- like the voting frame's own filter menu.
 function wowauditEvaluationFrame.FilterMenu(_, level)
-    if level ~= 1 then
-        return
-    end
+    if level == 1 then
+        local entry = displayLootTable()[currentSession()]
+        local typeCode = entry and entry.typeCode or "default"
 
-    local entry = displayLootTable()[currentSession()]
-    local typeCode = entry and entry.typeCode or "default"
-
-    local info = MSA_DropDownMenu_CreateInfo()
-    info.text = "Show responses"
-    info.isTitle = true
-    info.notCheckable = true
-    info.disabled = true
-    MSA_DropDownMenu_AddButton(info, level)
-
-    local function toggle(key)
-        settings().wowauditEvaluationFilters[key] = not responseVisible(key)
-        wowauditEvaluationFrame:Refresh()
-    end
-
-    for index = 1, addon:GetNumButtons(typeCode) do
-        local response = addon:GetResponse(typeCode, index)
-        info = MSA_DropDownMenu_CreateInfo()
-        info.text = (response and response.text) or ("Response " .. index)
-        if response then
-            info.colorCode = "|cff" .. addon.Utils:RGBToHex(addon:GetResponseColor(typeCode, index))
-        end
-        info.checked = responseVisible(index)
-        info.keepShownOnClick = true
-        info.func = function()
-            toggle(index)
-        end
+        local info = MSA_DropDownMenu_CreateInfo()
+        info.text = "Show responses"
+        info.isTitle = true
+        info.notCheckable = true
+        info.disabled = true
         MSA_DropDownMenu_AddButton(info, level)
-    end
 
-    for _, key in ipairs({"PASS", "AUTOPASS", "STATUS"}) do
-        local response = key ~= "STATUS" and addon:GetResponse(typeCode, key)
-        info = MSA_DropDownMenu_CreateInfo()
-        info.text = key == "STATUS" and "Status texts" or ((response and response.text) or key)
-        info.checked = responseVisible(key)
-        info.keepShownOnClick = true
-        info.func = function()
-            toggle(key)
+        local function toggle(key)
+            settings().wowauditEvaluationFilters[key] = not responseVisible(key)
+            wowauditEvaluationFrame:Refresh()
         end
+
+        for index = 1, addon:GetNumButtons(typeCode) do
+            local response = addon:GetResponse(typeCode, index)
+            info = MSA_DropDownMenu_CreateInfo()
+            info.text = (response and response.text) or ("Response " .. index)
+            if response then
+                info.colorCode = "|cff" .. addon.Utils:RGBToHex(addon:GetResponseColor(typeCode, index))
+            end
+            info.checked = responseVisible(index)
+            info.keepShownOnClick = true
+            info.func = function()
+                toggle(index)
+            end
+            MSA_DropDownMenu_AddButton(info, level)
+        end
+
+        for _, key in ipairs({"PASS", "AUTOPASS", "STATUS"}) do
+            local response = key ~= "STATUS" and addon:GetResponse(typeCode, key)
+            info = MSA_DropDownMenu_CreateInfo()
+            info.text = key == "STATUS" and "Status texts" or ((response and response.text) or key)
+            info.checked = responseVisible(key)
+            info.keepShownOnClick = true
+            info.func = function()
+                toggle(key)
+            end
+            MSA_DropDownMenu_AddButton(info, level)
+        end
+
+        info = MSA_DropDownMenu_CreateInfo()
+        info.text = _G.RANK
+        info.isTitle = true
+        info.notCheckable = true
+        info.disabled = true
         MSA_DropDownMenu_AddButton(info, level)
+
+        info = MSA_DropDownMenu_CreateInfo()
+        info.text = _G.RANK .. "..."
+        info.notCheckable = true
+        info.hasArrow = true
+        info.value = "FILTER_RANK"
+        MSA_DropDownMenu_AddButton(info, level)
+    elseif level == 2 then
+        if _G.MSA_DROPDOWNMENU_MENU_VALUE == "FILTER_RANK" then
+            local info = MSA_DropDownMenu_CreateInfo()
+
+            if IsInGuild() then
+                for k = 1, GuildControlGetNumRanks() do
+                    info = MSA_DropDownMenu_CreateInfo()
+                    info.text = GuildControlGetRankName(k)
+                    info.checked = rankFilterChecked(k)
+                    info.keepShownOnClick = true
+                    info.func = function()
+                        settings().wowauditEvaluationFilters.ranks[k] = not rankFilterChecked(k)
+                        wowauditEvaluationFrame:Refresh()
+                    end
+                    MSA_DropDownMenu_AddButton(info, level)
+                end
+            end
+
+            info = MSA_DropDownMenu_CreateInfo()
+            info.text = L["Not in your guild"]
+            info.checked = rankFilterChecked("notInYourGuild")
+            info.keepShownOnClick = true
+            info.func = function()
+                settings().wowauditEvaluationFilters.ranks.notInYourGuild =
+                    not rankFilterChecked("notInYourGuild")
+                wowauditEvaluationFrame:Refresh()
+            end
+            MSA_DropDownMenu_AddButton(info, level)
+        end
     end
 end
 

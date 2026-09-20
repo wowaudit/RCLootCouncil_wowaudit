@@ -39,6 +39,32 @@ local function coerceFilterKey(key)
     return tonumber(key) or key
 end
 
+local EVALUATION_VISIBILITY = {
+    unspecified = true,
+    never = true,
+    alongside = true,
+    replace = true
+}
+
+function RCwowaudit:EvaluationVisibility()
+    local value = addon:Getdb().wowauditEvaluationVisibility
+    if EVALUATION_VISIBILITY[value] then
+        return value
+    end
+    return "unspecified"
+end
+
+function RCwowaudit:SetEvaluationVisibility(value)
+    if not EVALUATION_VISIBILITY[value] then
+        value = "unspecified"
+    end
+    addon:Getdb().wowauditEvaluationVisibility = value
+    local eval = self:GetModule("wowauditEvaluationFrame", true)
+    if eval and eval.UpdateEscapeClose then
+        eval:UpdateEscapeClose()
+    end
+end
+
 local optionsTable = {
     type = "group",
     name = "RCLootCouncil",
@@ -129,6 +155,8 @@ local optionsTable = {
                             desc = "Choose how the rows in the evaluation window are ordered by default.",
                             values = {
                                 response = "Response",
+                                votes = "Votes",
+                                rolls = "Rolls",
                                 bis = "Best in slot",
                                 value = "Wish value",
                                 ilvl = "Item level",
@@ -140,6 +168,26 @@ local optionsTable = {
                             set = function(info, value)
                                 addon:Getdb().wowauditEvaluationSort = value
                                 RCwowaudit:RefreshEvaluationFrame()
+                            end
+                        },
+                        SetEvaluationVisibility = {
+                            type = "select",
+                            order = 3,
+                            name = "Evaluation window visibility",
+                            desc = "Choose whether the evaluation window opens automatically with the voting frame.",
+                            width = "full",
+                            values = {
+                                unspecified = "Unspecified",
+                                never = "Don't open automatically",
+                                alongside = "Open alongside the default voting frame",
+                                replace = "Replace the default voting frame"
+                            },
+                            sorting = {"unspecified", "never", "alongside", "replace"},
+                            get = function()
+                                return RCwowaudit:EvaluationVisibility()
+                            end,
+                            set = function(_, value)
+                                RCwowaudit:SetEvaluationVisibility(value)
                             end
                         }
                     }

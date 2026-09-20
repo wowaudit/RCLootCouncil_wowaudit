@@ -25,6 +25,11 @@ local function keepRowLit(row, child)
     child:HookScript("OnLeave", function()
         row.hover:SetAlpha(row:IsMouseOver() and HOVER_ALPHA or 0)
     end)
+    child:HookScript("OnMouseUp", function(self, button)
+        if button == "RightButton" and row.OpenCandidateMenu then
+            row:OpenCandidateMenu("cursor")
+        end
+    end)
 end
 
 local function createNoteIcon(parent, litRow)
