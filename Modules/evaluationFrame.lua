@@ -60,7 +60,7 @@ local maxRowStep = Row.HEIGHT + Row.SPACING
 local minRowStep = Row.MIN_HEIGHT + Row.SPACING
 local crestIcons = nil
 local uncachedItems = {}
-local filterMenu, sortMenu, difficultyMenu
+local filterMenu, sortMenu, difficultyMenu, disenchantMenu
 -- Which difficulty's wishes to show. Nil means each item's own. Kept for the
 -- current loot table so closing the window or switching tabs does not reset it.
 local wishDifficultyOverride
@@ -643,9 +643,11 @@ function wowauditEvaluationFrame:GetFrame()
     filterMenu = filterMenu or MSA_DropDownMenu_Create("RCwowauditEvaluationFilterMenu", UIParent)
     sortMenu = sortMenu or MSA_DropDownMenu_Create("RCwowauditEvaluationSortMenu", UIParent)
     difficultyMenu = difficultyMenu or MSA_DropDownMenu_Create("RCwowauditEvaluationDifficultyMenu", UIParent)
+    disenchantMenu = disenchantMenu or MSA_DropDownMenu_Create("RCwowauditEvaluationDisenchantMenu", UIParent)
     MSA_DropDownMenu_Initialize(filterMenu, self.FilterMenu)
     MSA_DropDownMenu_Initialize(sortMenu, self.SortMenu)
     MSA_DropDownMenu_Initialize(difficultyMenu, self.DifficultyMenu)
+    MSA_DropDownMenu_Initialize(disenchantMenu, self.DisenchantMenu)
 
     self:BuildHeader(f)
     self:BuildTabs(f)
@@ -885,6 +887,17 @@ function wowauditEvaluationFrame:BuildHeader(f)
     header.difficultyButton = Theme:Button(header, "Wishes: Heroic", 124, 22)
     header.difficultyButton:SetPoint("RIGHT", header.valueButton, "LEFT", -6, 0)
     bindDropDownButton(header.difficultyButton, difficultyMenu)
+
+    -- Icon only. The menu is the voting frame's enchanter list, under a Disenchant header.
+    header.disenchantButton = Theme:Button(header, "", 22, 22)
+    header.disenchantButton:SetPoint("RIGHT", header.difficultyButton, "LEFT", -6, 0)
+    header.disenchantButton.text:SetText("")
+    header.disenchantButton.icon = Theme:Icon(header.disenchantButton, 16)
+    header.disenchantButton.icon:SetPoint("CENTER")
+    local disenchantIcon = C_Spell.GetSpellTexture(13262)
+    header.disenchantButton.icon:SetTexture((disenchantIcon and disenchantIcon ~= 0) and disenchantIcon or
+        "Interface\\Icons\\INV_Enchant_Disenchant")
+    bindDropDownButton(header.disenchantButton, disenchantMenu)
 
     -- Two-line winner readout, parked left of the wishes control so the item
     -- identity on the left and the header buttons on the right stay put.
@@ -1427,6 +1440,12 @@ function wowauditEvaluationFrame:RefreshHeader(entry)
     local _, nativeDifficulty = wishLookupDifficulty(entry)
     local shownDifficulty = wishDifficultyOverride or nativeDifficulty
     header.difficultyButton:SetLabel("Wishes: " .. (DIFFICULTY_LABELS[shownDifficulty] or "Auto"))
+    -- The voting frame only offers Disenchant to the master looter.
+    if addon.isMasterLooter then
+        header.disenchantButton:Show()
+    else
+        header.disenchantButton:Hide()
+    end
     self:RefreshAwardedTo(header, entry)
 
     local track = entry and (wowauditTrackForItem(entry.link) or wowauditTrackForItem(entry.string))
@@ -1712,6 +1731,23 @@ function wowauditEvaluationFrame.DifficultyMenu(_, level)
             wowauditEvaluationFrame:Refresh()
         end
         MSA_DropDownMenu_AddButton(info, level)
+    end
+end
+
+-- Enchanter entries come from the voting frame. This only adds the category title.
+function wowauditEvaluationFrame.DisenchantMenu(menu, level)
+    if level == 1 then
+        local info = MSA_DropDownMenu_CreateInfo()
+        info.text = "Disenchant"
+        info.isTitle = true
+        info.notCheckable = true
+        info.disabled = true
+        MSA_DropDownMenu_AddButton(info, level)
+    end
+
+    local module = votingFrame()
+    if module and module.EnchantersMenu then
+        module.EnchantersMenu(menu, level)
     end
 end
 
