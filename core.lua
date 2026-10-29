@@ -124,6 +124,19 @@ local optionsTable = {
                                 db.wowauditSharingSetting = value
                                 wowauditSharingSetting = value
                             end
+                        },
+                        SetSimcSharing = {
+                            type = "toggle",
+                            order = 3,
+                            name = "Share SimC export",
+                            width = "double",
+                            desc = "Send your SimC export (requires the Simulationcraft addon) to your team's wowaudit admin when they ask for it, so your team can generate more accurate Raidbots reports.",
+                            get = function(info)
+                                return addon:Getdb().wowauditSimcSharing ~= false
+                            end,
+                            set = function(info, value)
+                                addon:Getdb().wowauditSimcSharing = value
+                            end
                         }
                     }
                 },
